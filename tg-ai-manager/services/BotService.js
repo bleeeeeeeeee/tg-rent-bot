@@ -49,7 +49,6 @@ class BotService {
         const data = query.data;
         const state = stateManager.get(userId);
 
-        // global cancel/back button
         if (data === 'cancel') {
             stateManager.clear(userId);
             return this.bot.sendMessage(userId, 'Действие отменено', MenuService.getMainMenu());
@@ -128,10 +127,8 @@ class BotService {
             return;
         }
 
-        // calendar selection for date
         if (data.startsWith('calendar_')) {
             const dateStr = data.replace('calendar_', '');
-            // store selected date and ask for time
             stateManager.set(userId, { mode: 'waiting_time', date: dateStr, ...state });
             await this.bot.sendMessage(userId, 'Введите время публикации в формате HH:mm');
             return;
@@ -139,7 +136,6 @@ class BotService {
 
         if (data.startsWith('calendar_prev_') || data.startsWith('calendar_next_')) {
             const parts = data.split('_');
-            // format: calendar_prev_YYYY-M
             const yearMonth = parts.slice(2).join('_');
             const [y, m] = yearMonth.split('-').map(Number);
             if (!isNaN(y) && !isNaN(m)) {
@@ -148,7 +144,6 @@ class BotService {
             return;
         }
 
-        // confirmation for deletion
         if (data === 'confirm_delete_yes') {
             const st = stateManager.get(userId);
             if (st?.mode === 'confirm_delete') {
@@ -235,7 +230,6 @@ class BotService {
         if (msg.text) await this.bot.sendMessage(userId, 'Сейчас это сообщение не обрабатывается. Используйте меню.');
         return;    }
 
-    // helper that notifies admin with link to the published post
     async sendPublishConfirmation(userId, channelMessage) {
         let url = null;
         try {
@@ -247,7 +241,6 @@ class BotService {
             console.error('getChat failed', e);
         }
         if (!url) {
-            // fallback to t.me/c/ style for private channels
             const raw = String(channelMessage.chat.id);
             const id = raw.startsWith('-100') ? raw.slice(4) : raw.replace('-', '');
             url = `https://t.me/c/${id}/${channelMessage.message_id}`;
@@ -259,7 +252,6 @@ class BotService {
             }
         };
         await this.bot.sendMessage(userId, 'Пост опубликован ✅', opts);
-        // provide main menu for next action
         await this.bot.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
     }
 }

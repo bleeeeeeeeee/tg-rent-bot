@@ -27,7 +27,6 @@ class MenuService {
         const keyboard = drafts.map((d, idx) => [
             { text: `✏️ Черновик ${idx + 1}`, callback_data: `draft_select_${d.id}` }
         ]);
-        // add navigation back to main menu
         keyboard.push([{ text: '↩️ Главное меню', callback_data: 'cancel' }]);
         return {
             reply_markup: {
@@ -72,7 +71,6 @@ class MenuService {
             rows.push(row);
             if (day > daysInMonth) break;
         }
-        // navigation row: previous month, label, next month
         const prev = new Date(year, month - 1, 1);
         const next = new Date(year, month + 1, 1);
         const nav = [
