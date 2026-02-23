@@ -39,6 +39,17 @@ class DraftService {
         const data = await this._read();
         return data.drafts.find(d => d.userId === String(userId) && d.id === draftId) || null;
     }
+
+    async update(draftId, userId, chatId, messageId) {
+        const data = await this._read();
+        const idx = data.drafts.findIndex(d => d.id === draftId && d.userId === String(userId));
+        if (idx === -1) return null;
+        data.drafts[idx].chatId = chatId;
+        data.drafts[idx].messageId = messageId;
+        data.drafts[idx].updatedAt = new Date().toISOString();
+        await this._write(data);
+        return data.drafts[idx];
+    }
 }
 
 module.exports = new DraftService();

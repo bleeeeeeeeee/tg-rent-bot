@@ -40,6 +40,7 @@ class MenuService {
         return {
             reply_markup: {
                 inline_keyboard: [
+                    [{ text: "✏️ Изменить", callback_data: `draft_edit_${draftId}` }],
                     [{ text: "📢 Опубликовать сейчас", callback_data: `draft_publish_now_${draftId}` }],
                     [{ text: "⏳ Позже", callback_data: `draft_publish_delay_${draftId}` }],
                     [{ text: "❌ Удалить", callback_data: `draft_delete_${draftId}` }],
@@ -47,6 +48,31 @@ class MenuService {
                 ]
             }
         };
+    }
+
+    static getCalendar(year, month) {
+        const date = new Date(year, month, 1);
+        const startDay = date.getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const rows = [];
+        let day = 1;
+        for (let week = 0; week < 6; week++) {
+            const row = [];
+            for (let d = 0; d < 7; d++) {
+                if (week === 0 && d < startDay) {
+                    row.push({ text: ' ', callback_data: 'noop' });
+                } else if (day > daysInMonth) {
+                    row.push({ text: ' ', callback_data: 'noop' });
+                } else {
+                    const dayStr = String(day).padStart(2, '0');
+                    row.push({ text: dayStr, callback_data: `calendar_${year}-${String(month+1).padStart(2,'0')}-${dayStr}` });
+                    day++;
+                }
+            }
+            rows.push(row);
+            if (day > daysInMonth) break;
+        }
+        return { reply_markup: { inline_keyboard: rows } };
     }
 }
 
