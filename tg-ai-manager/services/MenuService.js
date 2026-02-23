@@ -22,6 +22,32 @@ class MenuService {
             }
         };
     }
+
+    static getDraftsMenu(drafts) {
+        const keyboard = drafts.map((d, idx) => [
+            { text: `✏️ Черновик ${idx + 1}`, callback_data: `draft_select_${d.id}` }
+        ]);
+        // add navigation back to main menu
+        keyboard.push([{ text: '↩️ Главное меню', callback_data: 'cancel' }]);
+        return {
+            reply_markup: {
+                inline_keyboard: keyboard
+            }
+        };
+    }
+
+    static getDraftActionMenu(draftId) {
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "📢 Опубликовать сейчас", callback_data: `draft_publish_now_${draftId}` }],
+                    [{ text: "⏳ Позже", callback_data: `draft_publish_delay_${draftId}` }],
+                    [{ text: "❌ Удалить", callback_data: `draft_delete_${draftId}` }],
+                    [{ text: "↩️ Отмена", callback_data: "draft_cancel" }]
+                ]
+            }
+        };
+    }
 }
 
 module.exports = MenuService;

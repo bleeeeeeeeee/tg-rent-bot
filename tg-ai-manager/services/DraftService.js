@@ -34,6 +34,11 @@ class DraftService {
         data.drafts = data.drafts.filter(d => d.id !== draftId);
         await this._write(data);
     }
+
+    async getById(userId, draftId) {
+        const data = await this._read();
+        return data.drafts.find(d => d.userId === String(userId) && d.id === draftId) || null;
+    }
 }
 
 module.exports = new DraftService();

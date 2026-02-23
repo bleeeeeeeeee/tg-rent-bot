@@ -4,23 +4,26 @@ const PostService = require('./PostService');
 const DraftService = require('./DraftService');
 const MenuService = require('./MenuService');
 const stateManager = require('./StateManager');
+const DateParser = require('../utils/DateParser');
 
 class BotService {
-    constructor() {
+    constructor(postRepository) {
         this.bot = new TelegramBot(BOT_TOKEN, {
             polling: {
                 interval: 300,
                 autoStart: true,
-                params: {
-                    timeout: 10
-                }
+                params: { timeout: 10 }
             }
         });
+
         this.postService = new PostService(this.bot);
+        this.postRepository = postRepository;
         this.initHandlers();
     }
 
-    isAdmin(userId) { return String(userId) === ADMIN_ID; }
+    isAdmin(userId) {
+        return String(userId) === ADMIN_ID;
+    }
 
     initHandlers() {
         this.bot.onText(/\/start/, (msg) => this.handleStart(msg));
@@ -30,12 +33,7 @@ class BotService {
 
     async handleStart(msg) {
         if (!this.isAdmin(msg.from.id)) return;
-
-        await this.bot.sendMessage(
-            msg.chat.id,
-            "Выберите действие:",
-            MenuService.getMainMenu()
-        );
+        await this.bot.sendMessage(msg.chat.id, 'Выберите действие:', MenuService.getMainMenu());
     }
 
     async handleCallback(query) {
@@ -45,31 +43,89 @@ class BotService {
         const data = query.data;
         const state = stateManager.get(userId);
 
-        if (data === "menu_publish") {
-            stateManager.set(userId, { mode: "waiting_post" });
-            return this.bot.sendMessage(userId, "Отправьте сообщение (текст, фото, видео) для публикации:");
+        // global cancel/back button
+        if (data === 'cancel') {
+            stateManager.clear(userId);
+            return this.bot.sendMessage(userId, 'Действие отменено', MenuService.getMainMenu());
+        }
+
+        if (data === 'menu_publish') {
+            stateManager.set(userId, { mode: 'waiting_post' });
+            return this.bot.sendMessage(userId, 'Отправьте сообщение (текст, фото, видео) для публикации:');
+        }
+
+        if (data === 'menu_drafts') {
+            const drafts = await DraftService.getAll(userId);
+            if (drafts.length === 0) {
+                return this.bot.sendMessage(userId, 'Черновиков нет.', MenuService.getMainMenu());
+            }
+            return this.bot.sendMessage(userId, 'Выберите черновик:', MenuService.getDraftsMenu(drafts));
+        }
+
+        if (data.startsWith('draft_select_')) {
+            const draftId = data.replace('draft_select_', '');
+            const draft = await DraftService.getById(userId, draftId);
+            if (!draft) {
+                return this.bot.sendMessage(userId, 'Черновик не найден.', MenuService.getMainMenu());
+            }
+            stateManager.set(userId, { mode: 'draft_action', draftId, chatId: draft.chatId, messageId: draft.messageId });
+            return this.bot.sendMessage(userId, 'Действие с черновиком:', MenuService.getDraftActionMenu(draftId));
+        }
+
+        if (data.startsWith('draft_publish_now_')) {
+            const id = data.replace('draft_publish_now_', '');
+            const draft = await DraftService.getById(userId, id);
+            if (!draft) return this.bot.sendMessage(userId, 'Черновик не найден.', MenuService.getMainMenu());
+            await this.postService.publish(draft.chatId, draft.messageId);
+            await DraftService.remove(id);
+            await this.bot.sendMessage(userId, 'Пост опубликован ✅', MenuService.getMainMenu());
+            stateManager.clear(userId);
+            return;
+        }
+
+        if (data.startsWith('draft_publish_delay_')) {
+            const id = data.replace('draft_publish_delay_', '');
+            const draft = await DraftService.getById(userId, id);
+            if (!draft) return this.bot.sendMessage(userId, 'Черновик не найден.', MenuService.getMainMenu());
+            stateManager.set(userId, { mode: 'waiting_datetime', chatId: draft.chatId, messageId: draft.messageId, draftId: id });
+            await this.bot.sendMessage(userId, 'Укажите дату и время публикации в формате YYYY-MM-DD HH:mm или DD.MM.YYYY HH:mm');
+            return;
+        }
+
+        if (data.startsWith('draft_delete_')) {
+            const id = data.replace('draft_delete_', '');
+            await DraftService.remove(id);
+            await this.bot.sendMessage(userId, 'Черновик удалён', MenuService.getMainMenu());
+            stateManager.clear(userId);
+            return;
+        }
+
+        if (data === 'draft_cancel') {
+            stateManager.clear(userId);
+            await this.bot.sendMessage(userId, 'Действие отменено', MenuService.getMainMenu());
+            return;
         }
 
         if (!state?.chatId) return;
 
         switch (data) {
-            case "publish_now":
+            case 'publish_now':
                 await this.postService.publish(state.chatId, state.messageId);
-                await this.bot.sendMessage(userId, "Пост опубликован ✅", MenuService.getMainMenu());
+                await this.bot.sendMessage(userId, 'Пост опубликован ✅', MenuService.getMainMenu());
                 stateManager.clear(userId);
                 break;
-            case "publish_delay":
-                stateManager.set(userId, { ...state, mode: "waiting_delay" });
-                await this.bot.sendMessage(userId, "Через сколько минут опубликовать?");
+            case 'publish_delay':
+                stateManager.set(userId, { ...state, mode: 'waiting_datetime' });
+                await this.bot.sendMessage(userId, 'Укажите дату и время публикации в формате YYYY-MM-DD HH:mm или DD.MM.YYYY HH:mm');
                 break;
-            case "save_draft":
+            case 'save_draft':
                 await DraftService.add(userId, state.chatId, state.messageId);
-                await this.bot.sendMessage(userId, "Сохранено в черновики ✅", MenuService.getMainMenu());
+                await this.bot.sendMessage(userId, 'Сохранено в черновики ✅', MenuService.getMainMenu());
                 stateManager.clear(userId);
                 break;
-            case "cancel":
+            case 'cancel':
                 stateManager.clear(userId);
-                await this.bot.sendMessage(userId, "Действие отменено", MenuService.getMainMenu());
+                await this.bot.sendMessage(userId, 'Действие отменено', MenuService.getMainMenu());
                 break;
         }
     }
@@ -81,18 +137,22 @@ class BotService {
         const state = stateManager.get(userId);
         if (!state) return;
 
-        if (state.mode === "waiting_post") {
-            stateManager.set(userId, { mode: "choose_post_action", chatId: msg.chat.id, messageId: msg.message_id });
-            return this.bot.sendMessage(userId, "Выберите действие с постом:", MenuService.getPostActionMenu());
+        if (state.mode === 'waiting_post') {
+            stateManager.set(userId, { mode: 'choose_post_action', chatId: msg.chat.id, messageId: msg.message_id });
+            return this.bot.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu());
         }
 
-        if (state.mode === "waiting_delay") {
-            const minutes = parseInt(msg.text);
-            if (isNaN(minutes) || minutes <= 0) {
-                return this.bot.sendMessage(userId, "Введите корректное количество минут");
+        if (state.mode === 'waiting_datetime') {
+            const input = msg.text;
+            const date = DateParser.parse(input);
+            if (!date || date <= new Date()) {
+                return this.bot.sendMessage(userId, 'Некорректная дата/время. Попробуйте ещё раз.');
             }
-            this.postService.schedule(state.chatId, state.messageId, minutes);
-            await this.bot.sendMessage(userId, `Запланировано через ${minutes} минут ✅`, MenuService.getMainMenu());
+            await this.postRepository.addScheduled(userId, state.chatId, state.messageId, date.toISOString());
+            if (state.draftId) {
+                await DraftService.remove(state.draftId);
+            }
+            await this.bot.sendMessage(userId, `Запланировано на ${date.toLocaleString()} ✅`, MenuService.getMainMenu());
             stateManager.clear(userId);
         }
     }

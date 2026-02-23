@@ -13,7 +13,7 @@ class SchedulerService {
 
             for (const post of posts) {
                 if (new Date(post.publishAt) <= now) {
-                    await this.publishService.publish(post);
+                    await this.publishService.publish(post.chatId, post.messageId);
                     await this.postRepository.markAsPublished(post.id);
                 }
             }
