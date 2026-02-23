@@ -72,6 +72,15 @@ class MenuService {
             rows.push(row);
             if (day > daysInMonth) break;
         }
+        // navigation row: previous month, label, next month
+        const prev = new Date(year, month - 1, 1);
+        const next = new Date(year, month + 1, 1);
+        const nav = [
+            { text: '<', callback_data: `calendar_prev_${prev.getFullYear()}-${prev.getMonth()}` },
+            { text: `${year}-${String(month+1).padStart(2,'0')}`, callback_data: 'noop' },
+            { text: '>', callback_data: `calendar_next_${next.getFullYear()}-${next.getMonth()}` }
+        ];
+        rows.unshift(nav);
         return { reply_markup: { inline_keyboard: rows } };
     }
 }

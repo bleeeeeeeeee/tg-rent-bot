@@ -17,7 +17,6 @@ class BotService {
             }
         });
 
-        // helpful logging to understand connectivity issues
         this.bot.on('polling_error', (err) => console.error('polling_error', err));
         this.bot.on('webhook_error', (err) => console.error('webhook_error', err));
 
@@ -45,7 +44,6 @@ class BotService {
         const userId = query.from.id;
         if (!this.isAdmin(userId)) return;
 
-        // acknowledge the callback to Telegram to prevent repeats
         this.bot.answerCallbackQuery(query.id).catch(() => {});
 
         const data = query.data;
@@ -76,12 +74,7 @@ class BotService {
             if (!draft) {
                 return this.bot.sendMessage(userId, 'Черновик не найден.', MenuService.getMainMenu());
             }
-            // show draft content as preview
-            try {
-                await this.bot.copyMessage(userId, draft.chatId, draft.messageId);
-            } catch (e) {
-                console.error('preview failed', e);
-            }
+            try { await this.bot.copyMessage(userId, draft.chatId, draft.messageId); } catch {};
             stateManager.set(userId, { mode: 'draft_action', draftId, chatId: draft.chatId, messageId: draft.messageId });
             return this.bot.sendMessage(userId, 'Действие с черновиком:', MenuService.getDraftActionMenu(draftId));
         }
@@ -123,10 +116,7 @@ class BotService {
             const id = data.replace('draft_edit_', '');
             const draft = await DraftService.getById(userId, id);
             if (!draft) return this.bot.sendMessage(userId, 'Черновик не найден.', MenuService.getMainMenu());
-            // give user the existing content so they see what they're editing
-            try {
-                await this.bot.copyMessage(userId, draft.chatId, draft.messageId);
-            } catch (e) { console.error('preview fail', e); }
+            try { await this.bot.copyMessage(userId, draft.chatId, draft.messageId); } catch {};
             stateManager.set(userId, { mode: 'waiting_edit', draftId: id, chatId: draft.chatId, messageId: draft.messageId });
             await this.bot.sendMessage(userId, 'Отправьте новый текст/медиа для черновика:');
             return;
@@ -144,6 +134,17 @@ class BotService {
             // store selected date and ask for time
             stateManager.set(userId, { mode: 'waiting_time', date: dateStr, ...state });
             await this.bot.sendMessage(userId, 'Введите время публикации в формате HH:mm');
+            return;
+        }
+
+        if (data.startsWith('calendar_prev_') || data.startsWith('calendar_next_')) {
+            const parts = data.split('_');
+            // format: calendar_prev_YYYY-M
+            const yearMonth = parts.slice(2).join('_');
+            const [y, m] = yearMonth.split('-').map(Number);
+            if (!isNaN(y) && !isNaN(m)) {
+                await this.bot.sendMessage(userId, 'Выберите дату:', MenuService.getCalendar(y, m));
+            }
             return;
         }
 
@@ -171,10 +172,12 @@ class BotService {
                 stateManager.clear(userId);
                 break;
             }
-            case 'publish_delay':
-                stateManager.set(userId, { ...state, mode: 'waiting_datetime' });
-                await this.bot.sendMessage(userId, 'Укажите дату и время публикации в формате YYYY-MM-DD HH:mm или DD.MM.YYYY HH:mm');
+            case 'publish_delay': {
+                const today = new Date();
+                stateManager.set(userId, { ...state, mode: 'waiting_date' });
+                await this.bot.sendMessage(userId, 'Выберите дату для публикации:', MenuService.getCalendar(today.getFullYear(), today.getMonth()));
                 break;
+            }
             case 'save_draft':
                 await DraftService.add(userId, state.chatId, state.messageId);
                 await this.bot.sendMessage(userId, 'Сохранено в черновики ✅', MenuService.getMainMenu());
@@ -195,81 +198,42 @@ class BotService {
         if (!state) return;
 
         if (state.mode === 'waiting_post') {
-            // show the post exactly as it will appear in the channel
-            try {
-                await this.bot.copyMessage(userId, msg.chat.id, msg.message_id);
-            } catch (e) {
-                console.error('preview post failed', e);
-            }
+            try { await this.bot.copyMessage(userId, msg.chat.id, msg.message_id); } catch {};
             stateManager.set(userId, { mode: 'choose_post_action', chatId: msg.chat.id, messageId: msg.message_id });
             return this.bot.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu());
         }
 
-        if (state.mode === 'waiting_datetime') {
-            const input = msg.text;
-            const date = DateParser.parse(input);
-            if (!date || date <= new Date()) {
-                return this.bot.sendMessage(userId, 'Некорректная дата/время. Попробуйте ещё раз.');
-            }
-            await this.postRepository.addScheduled(userId, state.chatId, state.messageId, date.toISOString());
-            if (state.draftId) {
-                await DraftService.remove(state.draftId);
-            }
-            await this.bot.sendMessage(userId, `Запланировано на ${date.toLocaleString()} ✅`, MenuService.getMainMenu());
+
+        if (state.mode === 'waiting_edit') {
+            try { await this.bot.copyMessage(userId, msg.chat.id, msg.message_id); } catch {};
+            if (state.chatId && state.messageId) this.bot.deleteMessage(state.chatId, state.messageId).catch(() => {});
+            await DraftService.update(state.draftId, userId, msg.chat.id, msg.message_id);
+            await this.bot.sendMessage(userId, 'Черновик обновлён ✅', MenuService.getMainMenu());
             stateManager.clear(userId);
             return;
         }
 
         if (state.mode === 'waiting_date') {
-            // user should select via calendar only
             return this.bot.sendMessage(userId, 'Пожалуйста, выберите дату нажатием на клавиатуру.');
         }
 
         if (state.mode === 'waiting_time') {
             const t = msg.text;
             const parts = t.split(':');
-            if (parts.length !== 2) {
-                return this.bot.sendMessage(userId, 'Неверный формат. Укажите время как HH:mm.');
-            }
-            const hour = parseInt(parts[0], 10);
-            const minute = parseInt(parts[1], 10);
-            if (isNaN(hour) || isNaN(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-                return this.bot.sendMessage(userId, 'Неверный формат времени.');
-            }
-            const dateStr = state.date;
-            const date = new Date(`${dateStr}T${t}`);
-            if (date <= new Date()) {
-                return this.bot.sendMessage(userId, 'Дата/время в прошлом, выберите другое.');
-            }
+            if (parts.length !== 2) return this.bot.sendMessage(userId, 'Неверный формат. Укажите время как HH:mm.');
+            const hour = parseInt(parts[0], 10), minute = parseInt(parts[1], 10);
+            if (isNaN(hour) || isNaN(minute) || hour<0||hour>23||minute<0||minute>59) return this.bot.sendMessage(userId, 'Неверный формат времени.');
+            const date = new Date(`${state.date}T${t}`);
+            if (date <= new Date()) return this.bot.sendMessage(userId, 'Дата/время в прошлом, выберите другое.');
             await this.postRepository.addScheduled(userId, state.chatId, state.messageId, date.toISOString());
-            if (state.draftId) {
-                await DraftService.remove(state.draftId);
-            }
+            if (state.draftId) await DraftService.remove(state.draftId);
             await this.bot.sendMessage(userId, `Запланировано на ${date.toLocaleString()} ✅`, MenuService.getMainMenu());
             stateManager.clear(userId);
             return;
         }
 
-        // if we reach here and message is not expected, ignore or inform
-        return;
-        if (state.mode === 'waiting_edit') {
-            // show the new content as preview before saving
-            try {
-                await this.bot.copyMessage(userId, msg.chat.id, msg.message_id);
-            } catch (e) {
-                console.error('preview new edit failed', e);
-            }
-            // remove old draft message if possible to avoid clutter
-            if (state.chatId && state.messageId) {
-                this.bot.deleteMessage(state.chatId, state.messageId).catch(() => {});
-            }
-            // user sent new content for an existing draft
-            await DraftService.update(state.draftId, userId, msg.chat.id, msg.message_id);
-            await this.bot.sendMessage(userId, 'Черновик обновлён ✅', MenuService.getMainMenu());
-            stateManager.clear(userId);
-            return;
-        }
-    }
+        if (msg.text) await this.bot.sendMessage(userId, 'Сейчас это сообщение не обрабатывается. Используйте меню.');
+        return;    }
 
     // helper that notifies admin with link to the published post
     async sendPublishConfirmation(userId, channelMessage) {
@@ -295,6 +259,8 @@ class BotService {
             }
         };
         await this.bot.sendMessage(userId, 'Пост опубликован ✅', opts);
+        // provide main menu for next action
+        await this.bot.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
     }
 }
 
