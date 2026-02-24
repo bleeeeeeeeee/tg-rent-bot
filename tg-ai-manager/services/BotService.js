@@ -29,6 +29,12 @@ class BotService {
         return String(userId) === ADMIN_ID;
     }
 
+    async clearState(userId) {
+        // ensure any queued cleanup messages are removed before wiping state
+        await this.flushCleanup(userId);
+        stateManager.clear(userId);
+    }
+
     addCleanup(userId, msg) {
         if (!msg || !msg.message_id) return;
         const st = stateManager.get(userId) || {};
@@ -60,6 +66,8 @@ class BotService {
 
     async handleStart(msg) {
         if (!this.isAdmin(msg.from.id)) return;
+        // reset any pending state when user explicitly restarts
+        await this.clearState(msg.from.id);
         await this.sendMessage(msg.chat.id, 'Выберите действие:', MenuService.getMainMenu());
     }
 
@@ -74,7 +82,7 @@ class BotService {
         const state = stateManager.get(userId);
 
         if (data === 'cancel') {
-            stateManager.clear(userId);
+            await this.clearState(userId);
             return this.sendMessage(userId, 'Действие отменено', MenuService.getMainMenu());
         }
 
@@ -111,7 +119,7 @@ class BotService {
             const result = await this.postService.publish(draft.chatId, draft.messageId);
             await DraftService.remove(id);
             await this.sendPublishConfirmation(userId, result);
-            stateManager.clear(userId);
+            await this.clearState(userId);
             return;
         }
 
@@ -148,7 +156,7 @@ class BotService {
         }
 
         if (data === 'draft_cancel') {
-            stateManager.clear(userId);
+            await this.clearState(userId);
             await this.sendMessage(userId, 'Действие отменено', MenuService.getMainMenu());
             return;
         }
@@ -175,12 +183,12 @@ class BotService {
             if (st?.mode === 'confirm_delete') {
                 await DraftService.remove(st.draftId);
                 await this.sendMessage(userId, 'Черновик удалён ✅', MenuService.getMainMenu());
-                stateManager.clear(userId);
+                await this.clearState(userId);
             }
             return;
         }
         if (data === 'confirm_delete_no') {
-            stateManager.clear(userId);
+            await this.clearState(userId);
             return this.sendMessage(userId, 'Удаление отменено', MenuService.getMainMenu());
         }
 
@@ -190,7 +198,7 @@ class BotService {
             case 'publish_now': {
                 const result = await this.postService.publish(state.chatId, state.messageId);
                 await this.sendPublishConfirmation(userId, result);
-                stateManager.clear(userId);
+                await this.clearState(userId);
                 break;
             }
             case 'publish_delay': {
@@ -202,10 +210,10 @@ class BotService {
             case 'save_draft':
                 await DraftService.add(userId, state.chatId, state.messageId);
                 await this.sendMessage(userId, 'Сохранено в черновики ✅', MenuService.getMainMenu());
-                stateManager.clear(userId);
+                await this.clearState(userId);
                 break;
             case 'cancel':
-                stateManager.clear(userId);
+                await this.clearState(userId);
                 await this.sendMessage(userId, 'Действие отменено', MenuService.getMainMenu());
                 break;
         }
@@ -214,6 +222,9 @@ class BotService {
     async handleMessage(msg) {
         const userId = msg.from.id;
         if (!this.isAdmin(userId)) return;
+
+        // commands should not be treated as post content
+        if (msg.text && msg.text.startsWith('/')) return;
 
         // clear out any old transient messages before processing this one
         await this.flushCleanup(userId);
@@ -241,7 +252,7 @@ class BotService {
             if (copied && copied.message_id) state.preview = copied.message_id;
             await DraftService.update(state.draftId, userId, msg.chat.id, msg.message_id);
             await this.sendMessage(userId, 'Черновик обновлён ✅', MenuService.getMainMenu());
-            stateManager.clear(userId);
+            await this.clearState(userId);
             return;
         }
 
