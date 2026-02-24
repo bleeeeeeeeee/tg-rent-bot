@@ -10,20 +10,11 @@ class SchedulerService {
     }
 
     async addAdminCleanup(msg) {
-        if (!msg || !msg.message_id) return;
-        const st = stateManager.get(ADMIN_ID) || {};
-        st.cleanup = st.cleanup || [];
-        st.cleanup.push(msg.message_id);
-        stateManager.set(ADMIN_ID, st);
+        // no-op, keep history
     }
 
     async flushAdminCleanup() {
-        const st = stateManager.get(ADMIN_ID);
-        if (st?.cleanup) {
-            for (const id of st.cleanup) this.bot.deleteMessage(ADMIN_ID, id).catch(() => {});
-            delete st.cleanup;
-            stateManager.set(ADMIN_ID, st);
-        }
+        // disabled
     }
 
     start() {

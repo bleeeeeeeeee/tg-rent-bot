@@ -30,32 +30,22 @@ class BotService {
     }
 
     async clearState(userId) {
-        // ensure any queued cleanup messages are removed before wiping state
-        await this.flushCleanup(userId);
+        // just clear state, do not delete anything
         stateManager.clear(userId);
     }
 
+    // cleanup helpers are currently disabled so chat history is preserved
     addCleanup(userId, msg) {
-        if (!msg || !msg.message_id) return;
-        const st = stateManager.get(userId) || {};
-        st.cleanup = st.cleanup || [];
-        st.cleanup.push(msg.message_id);
-        stateManager.set(userId, st);
+        // no-op
     }
 
     async sendMessage(userId, text, options) {
-        const msg = await this.bot.sendMessage(userId, text, options);
-        this.addCleanup(userId, msg);
-        return msg;
+        // simply forward; no tracking
+        return this.bot.sendMessage(userId, text, options);
     }
 
     async flushCleanup(userId) {
-        const st = stateManager.get(userId);
-        if (st?.cleanup) {
-            for (const id of st.cleanup) this.bot.deleteMessage(userId, id).catch(() => {});
-            delete st.cleanup;
-            stateManager.set(userId, st);
-        }
+        // cleanup disabled
     }
 
     initHandlers() {
@@ -226,8 +216,7 @@ class BotService {
         // commands should not be treated as post content
         if (msg.text && msg.text.startsWith('/')) return;
 
-        // clear out any old transient messages before processing this one
-        await this.flushCleanup(userId);
+        // no cleanup
 
         let state = stateManager.get(userId);
         if (!state) return;
