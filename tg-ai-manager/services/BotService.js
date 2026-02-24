@@ -4,8 +4,9 @@ const PostService = require('./PostService');
 const DraftService = require('./DraftService');
 const MenuService = require('./MenuService');
 const stateManager = require('./StateManager');
-const DateParser = require('../utils/DateParser');
 const { CHANNEL_ID } = require('../config');
+const HistoryRepository = require('./HistoryRepository');
+const SummaryService = require('./SummaryService');
 
 class BotService {
     constructor(postRepository) {
@@ -22,7 +23,17 @@ class BotService {
 
         this.postService = new PostService(this.bot);
         this.postRepository = postRepository;
+
+        // prepare channel url base for history links
+        this.channelUrlPrefix = null;
+        this.prefixReady = this.initChannelUrlPrefix();
+
         this.initHandlers();
+
+        // once the channel prefix is ready, perform a one‑time silent sync of existing posts
+        this.prefixReady.then(() => {
+            this.syncHistory(true).catch(err => console.error('initial sync failed', err));
+        });
     }
 
     isAdmin(userId) {
@@ -30,28 +41,33 @@ class BotService {
     }
 
     async clearState(userId) {
-        // just clear state, do not delete anything
         stateManager.clear(userId);
     }
 
-    // cleanup helpers are currently disabled so chat history is preserved
-    addCleanup(userId, msg) {
-        // no-op
-    }
-
-    async sendMessage(userId, text, options) {
-        // simply forward; no tracking
+    async sendMessage(userId, text, options = {}) {
+        // prepare markup object
+        options.reply_markup = options.reply_markup || {};
+        // if we are sending an inline keyboard we should also clear any
+        // existing reply keyboard so the user sees buttons clearly.
+        if (options.reply_markup.inline_keyboard) {
+            options.reply_markup.remove_keyboard = true;
+        }
+        // otherwise, add a simple reply keyboard with a menu button if nothing
+        // else is present.
+        if (!options.reply_markup.inline_keyboard && !options.reply_markup.keyboard) {
+            options.reply_markup.keyboard = [[{ text: 'Главное меню' }]];
+            options.reply_markup.resize_keyboard = true;
+        }
         return this.bot.sendMessage(userId, text, options);
-    }
-
-    async flushCleanup(userId) {
-        // cleanup disabled
     }
 
     initHandlers() {
         this.bot.onText(/\/start/, (msg) => this.handleStart(msg));
+        this.bot.onText(/\/history(?:\s+(.+))?/, (msg, match) => this.handleHistory(msg, match));
+        this.bot.onText(/\/pinchannel/, (msg) => this.handlePinChannel(msg));
         this.bot.on('callback_query', (query) => this.handleCallback(query));
         this.bot.on('message', (msg) => this.handleMessage(msg));
+        this.bot.on('edited_message', (msg) => this.handleEdited(msg));
     }
 
     async handleStart(msg) {
@@ -61,13 +77,134 @@ class BotService {
         await this.sendMessage(msg.chat.id, 'Выберите действие:', MenuService.getMainMenu());
     }
 
+    /**
+     * Synchronize channel history into our local file.
+     * Posts already present are skipped; new entries are summarized and added.
+     * This method is safe to call multiple times; it will only touch missing IDs.
+     */
+    /**
+     * Synchronize channel history into our local file.
+     * @param {boolean} silent - when true, do not send messages to admin; used at startup.
+     */
+    async syncHistory(silent = false) {
+        await this.prefixReady;
+        const existing = new Set((await HistoryRepository.getAll()).map(r => Number(r.messageId)));
+        let added = 0;
+        let consecutiveFails = 0;
+        const maxExisting = existing.size ? Math.max(...existing) : 0;
+        // start scanning from the first unseen message to avoid reprocessing
+        let startId = maxExisting + 1;
+        for (let id = startId;; id++) {
+            if (existing.has(id)) {
+                consecutiveFails = 0;
+                continue;
+            }
+            try {
+                const copy = await this.bot.copyMessage(ADMIN_ID, CHANNEL_ID, id);
+                if (copy && copy.message_id) {
+                    await this.bot.deleteMessage(ADMIN_ID, copy.message_id).catch(() => {});
+                }
+                const text = (copy.text || '') + (copy.caption ? '\n' + copy.caption : '');
+                const summary = await SummaryService.summarize(text);
+                await HistoryRepository.addPublished('', CHANNEL_ID, id, summary, copy.date || null);
+                added++;
+                existing.add(id);
+                consecutiveFails = 0;
+            } catch (e) {
+                consecutiveFails++;
+                if (id > maxExisting && consecutiveFails >= 20) break;
+            }
+            if (id > maxExisting + 5000) break;
+        }
+        if (!silent) {
+            if (added > 0) {
+                await this.sendMessage(ADMIN_ID, `Синхронизировано ${added} постов истории.`);
+            } else {
+                await this.sendMessage(ADMIN_ID, 'Новых постов для синхронизации не найдено.');
+            }
+        }
+    }
+
+    async initChannelUrlPrefix() {
+        try {
+            const chat = await this.bot.getChat(CHANNEL_ID);
+            if (chat.username) {
+                this.channelUrlPrefix = `https://t.me/${chat.username}`;
+                return;
+            }
+        } catch (e) {
+            console.error('initChannelUrlPrefix error', e);
+        }
+        const raw = String(CHANNEL_ID || '');
+        const id = raw.startsWith('-100') ? raw.slice(4) : raw.replace('-', '');
+        this.channelUrlPrefix = `https://t.me/c/${id}`;
+    }
+
+    async handleHistory(msg, match) {
+        const userId = msg.from.id;
+        if (!this.isAdmin(userId)) return; // safety
+        await this.prefixReady;
+        const term = match && match[1] ? match[1].trim().toLowerCase() : null;
+        const records = await HistoryRepository.getAll();
+        let filtered = records;
+        if (term) {
+            filtered = records.filter(r => {
+                const hay = [r.title, r.main, r.description, ...(r.keywords||[])].join(' ').toLowerCase();
+                return hay.includes(term);
+            });
+        }
+        if (filtered.length === 0) {
+            const reply = term ? 'Записей с таким запросом нет.' : 'История публикаций пуста.';
+            await this.sendMessage(userId, reply);
+            return this.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
+        }
+        const header = 'История публикаций' + (term ? ` (по «${term}»)` : '');
+        await this.sendMessage(userId, header);
+        // send up to 50 individual entries with their own button
+        for (let i = 0; i < Math.min(filtered.length, 50); i++) {
+            const r = filtered[i];
+            const url = this.channelUrlPrefix ? `${this.channelUrlPrefix}/${r.messageId}` : '';
+            const title = r.title || `пост ${i+1}`;
+            let text = `${i+1}. *${title}*`;
+            if (r.main) text += `\n_${r.main}_`;
+            if (r.description) text += `\n${r.description}`;
+            if (r.keywords && r.keywords.length) text += `\n*Tags:* ${r.keywords.join(', ')}`;
+            const opts = { reply_markup: { inline_keyboard: [[{ text: 'Перейти', url }]] }, parse_mode: 'Markdown' };
+            await this.sendMessage(userId, text, opts);
+        }
+        // after listing show main menu again
+        await this.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
+    }
+
+    async handlePinChannel(msg) {
+        const userId = msg.from.id;
+        if (!this.isAdmin(userId)) return;
+        await this.prefixReady;
+        const url = this.channelUrlPrefix || 'https://t.me/' + CHANNEL_ID;
+        const text = 'Наш канал:';
+        const opts = {
+            reply_markup: {
+                inline_keyboard: [[{ text: 'Перейти в канал', url }]]
+            }
+        };
+        const m = await this.sendMessage(userId, text, opts);
+        try { await this.bot.pinChatMessage(userId, m.message_id); } catch (e) { console.error('pin failed', e); }
+    }
+
     async handleCallback(query) {
         const userId = query.from.id;
         if (!this.isAdmin(userId)) return;
 
         this.bot.answerCallbackQuery(query.id).catch(() => {});
 
-        await this.flushCleanup(userId);
+        // remove inline keyboard from the message that generated this callback
+        if (query.message) {
+            this.bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+                chat_id: query.message.chat.id,
+                message_id: query.message.message_id
+            }).catch(() => {});
+        }
+
         const data = query.data;
         const state = stateManager.get(userId);
 
@@ -79,6 +216,41 @@ class BotService {
         if (data === 'menu_publish') {
             stateManager.set(userId, { mode: 'waiting_post' });
             return this.sendMessage(userId, 'Отправьте сообщение (текст, фото, видео) для публикации:');
+        }
+
+        if (data === 'menu_history') {
+            await this.clearState(userId);
+            return this.sendMessage(userId, 'Как вывести историю?', MenuService.getHistorySourceMenu());
+        }
+
+
+        if (data === 'history_chat') {
+            // reuse existing history handler
+            await this.clearState(userId);
+            await this.handleHistory({ from: { id: userId } }, [null]);
+            return;
+        }
+
+        if (data === 'history_file') {
+            await this.clearState(userId);
+            // convert history to CSV for easier viewing
+            const recs = await HistoryRepository.getAll();
+            let csv = 'publishedAt,userId,chatId,messageId,title,main,description,keywords\n';
+            for (const r of recs) {
+                const line = [r.publishedAt, r.userId, r.chatId, r.messageId,
+                    r.title, r.main, r.description,
+                    (r.keywords||[]).join('|')]
+                    .map(v => '"' + String(v||'').replace(/"/g,'""') + '"')
+                    .join(',');
+                csv += line + '\n';
+            }
+            try {
+                await this.bot.sendDocument(userId, Buffer.from(csv), { filename: 'history.csv' });
+            } catch (e) {
+                console.error('send history file failed', e);
+                await this.sendMessage(userId, 'Не удалось отправить файл.');
+            }
+            return this.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
         }
 
         if (data === 'menu_drafts') {
@@ -106,7 +278,7 @@ class BotService {
             const id = data.replace('draft_publish_now_', '');
             const draft = await DraftService.getById(userId, id);
             if (!draft) return this.sendMessage(userId, 'Черновик не найден.', MenuService.getMainMenu());
-            const result = await this.postService.publish(draft.chatId, draft.messageId);
+            const result = await this.postService.publish(userId, draft.chatId, draft.messageId);
             await DraftService.remove(id);
             await this.sendPublishConfirmation(userId, result);
             await this.clearState(userId);
@@ -120,6 +292,7 @@ class BotService {
             const today = new Date();
             stateManager.set(userId, { mode: 'waiting_date', chatId: draft.chatId, messageId: draft.messageId, draftId: id });
             await this.sendMessage(userId, 'Выберите дату для публикации:', MenuService.getCalendar(today.getFullYear(), today.getMonth()));
+            await this.sendMessage(userId, 'Либо выберите действие:', MenuService.getMainMenu());
             return;
         }
 
@@ -186,7 +359,7 @@ class BotService {
 
         switch (data) {
             case 'publish_now': {
-                const result = await this.postService.publish(state.chatId, state.messageId);
+                const result = await this.postService.publish(userId, state.chatId, state.messageId);
                 await this.sendPublishConfirmation(userId, result);
                 await this.clearState(userId);
                 break;
@@ -195,6 +368,8 @@ class BotService {
                 const today = new Date();
                 stateManager.set(userId, { ...state, mode: 'waiting_date' });
                 await this.sendMessage(userId, 'Выберите дату для публикации:', MenuService.getCalendar(today.getFullYear(), today.getMonth()));
+                // also give user option to return to menu
+                await this.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
                 break;
             }
             case 'save_draft':
@@ -212,6 +387,12 @@ class BotService {
     async handleMessage(msg) {
         const userId = msg.from.id;
         if (!this.isAdmin(userId)) return;
+
+        // allow quick menu button
+        if (msg.text === 'Главное меню') {
+            await this.clearState(userId);
+            return this.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
+        }
 
         // commands should not be treated as post content
         if (msg.text && msg.text.startsWith('/')) return;
@@ -268,28 +449,36 @@ class BotService {
         return;    }
 
     async sendPublishConfirmation(userId, channelMessage) {
-        let url = null;
+        await this.prefixReady;
+        const url = this.channelUrlPrefix
+            ? `${this.channelUrlPrefix}/${channelMessage.message_id}`
+            : null;
         try {
-            const chat = await this.bot.getChat(CHANNEL_ID || channelMessage.chat.id);
-            if (chat.username) {
-                url = `https://t.me/${chat.username}/${channelMessage.message_id}`;
+            if (url) {
+                const opts = {
+                    reply_markup: {
+                        inline_keyboard: [[{ text: 'Перейти в канал', url }]]
+                    }
+                };
+                await this.sendMessage(userId, 'Пост опубликован ✅', opts);
+            } else {
+                await this.sendMessage(userId, 'Пост опубликован ✅');
             }
         } catch (e) {
-            console.error('getChat failed', e);
+            console.error('publish confirmation failed', e);
+            await this.sendMessage(userId, 'Пост опубликован ✅');
         }
-        if (!url) {
-            const raw = String(channelMessage.chat.id);
-            const id = raw.startsWith('-100') ? raw.slice(4) : raw.replace('-', '');
-            url = `https://t.me/c/${id}/${channelMessage.message_id}`;
-        }
-
-        const opts = {
-            reply_markup: {
-                inline_keyboard: [[{ text: 'Перейти в канал', url }]]
-            }
-        };
-        await this.sendMessage(userId, 'Пост опубликован ✅', opts);
         await this.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
+    }
+
+    async handleEdited(msg) {
+        if (!msg || !msg.chat) return;
+        if (String(msg.chat.id) !== String(CHANNEL_ID)) return;
+        const text = (msg.text || '') + (msg.caption ? '\n' + msg.caption : '');
+        const summary = await SummaryService.summarize(text);
+        if (summary) {
+            await HistoryRepository.updateSummary(msg.message_id, summary);
+        }
     }
 }
 

@@ -25,7 +25,7 @@ class SchedulerService {
 
             for (const post of posts) {
                 if (new Date(post.publishAt) <= now) {
-                    const result = await this.publishService.publish(post.chatId, post.messageId);
+                    const result = await this.publishService.publish(post.userId, post.chatId, post.messageId);
                     this.notifyAdmin(result).catch(console.error);
                     await this.postRepository.markAsPublished(post.id);
                 }
