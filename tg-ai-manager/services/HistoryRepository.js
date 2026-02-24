@@ -47,7 +47,7 @@ class HistoryRepository {
 
     async getAll() {
         const data = await this._read();
-        // newest first
+        // newest first by default (latest публикации идут первыми)
         return data.records.sort((a,b) => new Date(b.publishedAt) - new Date(a.publishedAt));
     }
 

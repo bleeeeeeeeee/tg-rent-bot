@@ -65,6 +65,7 @@ class BotService {
         this.bot.onText(/\/start/, (msg) => this.handleStart(msg));
         this.bot.onText(/\/history(?:\s+(.+))?/, (msg, match) => this.handleHistory(msg, match));
         this.bot.onText(/\/pinchannel/, (msg) => this.handlePinChannel(msg));
+        this.bot.onText(/\/sync/, (msg) => this.handleSyncCommand(msg));
         this.bot.on('callback_query', (query) => this.handleCallback(query));
         this.bot.on('message', (msg) => this.handleMessage(msg));
         this.bot.on('edited_message', (msg) => this.handleEdited(msg));
@@ -75,6 +76,16 @@ class BotService {
         // reset any pending state when user explicitly restarts
         await this.clearState(msg.from.id);
         await this.sendMessage(msg.chat.id, 'Выберите действие:', MenuService.getMainMenu());
+    }
+
+    async handleSyncCommand(msg) {
+        const userId = msg.from.id;
+        if (!this.isAdmin(userId)) return;
+        await this.sendMessage(userId, 'Запускаю синхронизацию истории (в фоне). Пожалуйста, подождите.');
+        this.syncHistory().catch(e => {
+            console.error('manual sync error', e);
+            this.sendMessage(userId, 'Синхронизация завершилась с ошибкой.');
+        });
     }
 
     /**
@@ -90,13 +101,12 @@ class BotService {
         await this.prefixReady;
         const existing = new Set((await HistoryRepository.getAll()).map(r => Number(r.messageId)));
         let added = 0;
-        let consecutiveFails = 0;
         const maxExisting = existing.size ? Math.max(...existing) : 0;
-        // start scanning from the first unseen message to avoid reprocessing
-        let startId = maxExisting + 1;
-        for (let id = startId;; id++) {
+        const MAX_SEARCH = 1000000; // search up to one million IDs to be safe
+        let consecutiveMisses = 0;
+        for (let id = 1; id <= MAX_SEARCH; id++) {
             if (existing.has(id)) {
-                consecutiveFails = 0;
+                consecutiveMisses = 0;
                 continue;
             }
             try {
@@ -105,16 +115,22 @@ class BotService {
                     await this.bot.deleteMessage(ADMIN_ID, copy.message_id).catch(() => {});
                 }
                 const text = (copy.text || '') + (copy.caption ? '\n' + copy.caption : '');
-                const summary = await SummaryService.summarize(text);
+                let summary = null;
+                if (!text.trim()) {
+                    summary = { main: '<медиа>', description: '<медиа>' };
+                } else {
+                    summary = await SummaryService.summarize(text);
+                }
                 await HistoryRepository.addPublished('', CHANNEL_ID, id, summary, copy.date || null);
                 added++;
                 existing.add(id);
-                consecutiveFails = 0;
+                consecutiveMisses = 0;
             } catch (e) {
-                consecutiveFails++;
-                if (id > maxExisting && consecutiveFails >= 20) break;
+                consecutiveMisses++;
+                // if we've gone far beyond any existing id and are failing repeatedly,
+                // assume we've passed the last message and can stop early.
+                if (id > maxExisting && consecutiveMisses >= 500) break;
             }
-            if (id > maxExisting + 5000) break;
         }
         if (!silent) {
             if (added > 0) {
@@ -158,21 +174,27 @@ class BotService {
             await this.sendMessage(userId, reply);
             return this.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
         }
-        const header = 'История публикаций' + (term ? ` (по «${term}»)` : '');
-        await this.sendMessage(userId, header);
-        // send up to 50 individual entries with their own button
-        for (let i = 0; i < Math.min(filtered.length, 50); i++) {
+        // build a single text message with all entries (limit to 50 for safety)
+        const header = 'История публикаций' + (term ? ` (по «${term}»)` : '') + ' (новейшие сверху)';
+        let text = header + '\n\n';
+        const limit = 50;
+        for (let i = 0; i < Math.min(filtered.length, limit); i++) {
             const r = filtered[i];
             const url = this.channelUrlPrefix ? `${this.channelUrlPrefix}/${r.messageId}` : '';
-            const title = r.title || `пост ${i+1}`;
-            let text = `${i+1}. *${title}*`;
-            if (r.main) text += `\n_${r.main}_`;
-            if (r.description) text += `\n${r.description}`;
-            if (r.keywords && r.keywords.length) text += `\n*Tags:* ${r.keywords.join(', ')}`;
-            const opts = { reply_markup: { inline_keyboard: [[{ text: 'Перейти', url }]] }, parse_mode: 'Markdown' };
-            await this.sendMessage(userId, text, opts);
+            // topic is main idea, description carries the detailed message
+            const topic = r.main || r.title || `пост ${i+1}`;
+            text += `${i+1}. *${topic}*`;
+            text += '\n';
+            const desc = r.description || r.main || '';
+            if (desc) text += `${desc}\n`;
+            if (url) text += `[Ссылка на пост](${url})\n`;
+            text += '\n';
         }
-        // after listing show main menu again
+        if (filtered.length > limit) {
+            text += `...и ещё ${filtered.length - limit} записей`;
+        }
+        const opts = { parse_mode: 'Markdown', disable_web_page_preview: true };
+        await this.sendMessage(userId, text.trim(), opts);
         await this.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
     }
 
