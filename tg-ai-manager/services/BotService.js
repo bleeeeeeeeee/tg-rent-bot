@@ -65,7 +65,6 @@ class BotService {
         this.bot.onText(/\/start/, (msg) => this.handleStart(msg));
         this.bot.onText(/\/history(?:\s+(.+))?/, (msg, match) => this.handleHistory(msg, match));
         this.bot.onText(/\/pinchannel/, (msg) => this.handlePinChannel(msg));
-        this.bot.onText(/\/sync/, (msg) => this.handleSyncCommand(msg));
         this.bot.on('callback_query', (query) => this.handleCallback(query));
         this.bot.on('message', (msg) => this.handleMessage(msg));
         this.bot.on('edited_message', (msg) => this.handleEdited(msg));
@@ -76,16 +75,6 @@ class BotService {
         // reset any pending state when user explicitly restarts
         await this.clearState(msg.from.id);
         await this.sendMessage(msg.chat.id, 'Выберите действие:', MenuService.getMainMenu());
-    }
-
-    async handleSyncCommand(msg) {
-        const userId = msg.from.id;
-        if (!this.isAdmin(userId)) return;
-        await this.sendMessage(userId, 'Запускаю синхронизацию истории (в фоне). Пожалуйста, подождите.');
-        this.syncHistory().catch(e => {
-            console.error('manual sync error', e);
-            this.sendMessage(userId, 'Синхронизация завершилась с ошибкой.');
-        });
     }
 
     /**
@@ -102,13 +91,12 @@ class BotService {
         const existing = new Set((await HistoryRepository.getAll()).map(r => Number(r.messageId)));
         let added = 0;
         const maxExisting = existing.size ? Math.max(...existing) : 0;
-        const MAX_SEARCH = 1000000; // search up to one million IDs to be safe
-        let consecutiveMisses = 0;
-        for (let id = 1; id <= MAX_SEARCH; id++) {
-            if (existing.has(id)) {
-                consecutiveMisses = 0;
-                continue;
-            }
+        // start scanning from first possible id (1) or after known ones
+        const startId = existing.size ? maxExisting + 1 : 1;
+        // cap the scan range so we don't loop forever; assume channel won't exceed 5000 posts
+        const CAP = startId + 5000;
+        for (let id = startId; id <= CAP; id++) {
+            if (existing.has(id)) continue;
             try {
                 const copy = await this.bot.copyMessage(ADMIN_ID, CHANNEL_ID, id);
                 if (copy && copy.message_id) {
@@ -124,12 +112,8 @@ class BotService {
                 await HistoryRepository.addPublished('', CHANNEL_ID, id, summary, copy.date || null);
                 added++;
                 existing.add(id);
-                consecutiveMisses = 0;
             } catch (e) {
-                consecutiveMisses++;
-                // if we've gone far beyond any existing id and are failing repeatedly,
-                // assume we've passed the last message and can stop early.
-                if (id > maxExisting && consecutiveMisses >= 500) break;
+                // ignore errors; missing message IDs are normal
             }
         }
         if (!silent) {
