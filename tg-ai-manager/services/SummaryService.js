@@ -6,8 +6,11 @@ class SummaryService {
 
     async summarize(text) {
         if (!text || text.trim() === '') return null;
-        // if no API key available just return empty structure
-        if (!this.apiKey) return null;
+        // if no API key available just return fallback summary (first words)
+        if (!this.apiKey) {
+            const sample = text.trim().split('\n')[0];
+            return { main: sample, description: sample };
+        }
 
         const prompt = `You are an assistant that summarizes Telegram posts.\n` +
             `Given the following message text:\n\n${text}\n\n` +
@@ -45,7 +48,10 @@ class SummaryService {
                     json = JSON.parse(match[0]);
                 }
             }
-            return json;
+            if (json) return json;
+            // if parsing failed, fall back to simple snippet
+            const sample = text.trim().split('\n')[0];
+            return { main: sample, description: sample };
         } catch (e) {
             console.error('SummaryService error', e);
             return null;

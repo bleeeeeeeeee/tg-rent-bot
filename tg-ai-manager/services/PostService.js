@@ -11,11 +11,14 @@ class PostService {
         const text = (msg.text || '') + (msg.caption ? '\n' + msg.caption : '');
         let summary = null;
         if (!text.trim()) {
-            // media-only or link-only post – keep a basic marker
-            summary = { main: '<медиа>', description: '<медиа>' };
+            const mt = require('./MediaType').detect(msg);
+            summary = { main: `<${mt}>`, description: `<${mt}>` };
         } else {
             try {
                 summary = await SummaryService.summarize(text);
+                if (!summary) {
+                    console.warn('no summary generated for publish text', text.slice(0,100));
+                }
             } catch (e) {
                 console.error('SummaryService failed', e);
             }
@@ -23,7 +26,9 @@ class PostService {
         if (!summary) summary = {};
         // try to preserve the original post date if available
         const sentDate = msg.date || null;
-        await HistoryRepository.addPublished(userId || '', chatId, msg.message_id, summary, sentDate);
+        const groupId = msg.media_group_id || null; // only media albums
+        const replyTo = msg.reply_to_message && msg.reply_to_message.message_id ? msg.reply_to_message.message_id : null;
+        await HistoryRepository.addPublished(userId || '', chatId, msg.message_id, summary, sentDate, groupId, replyTo);
         return msg;
     }
 }

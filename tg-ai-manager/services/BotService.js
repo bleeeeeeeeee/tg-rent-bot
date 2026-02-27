@@ -65,9 +65,13 @@ class BotService {
         this.bot.onText(/\/start/, (msg) => this.handleStart(msg));
         this.bot.onText(/\/history(?:\s+(.+))?/, (msg, match) => this.handleHistory(msg, match));
         this.bot.onText(/\/pinchannel/, (msg) => this.handlePinChannel(msg));
+        this.bot.onText(/\/sync/, (msg) => this.handleSyncCommand(msg));
         this.bot.on('callback_query', (query) => this.handleCallback(query));
         this.bot.on('message', (msg) => this.handleMessage(msg));
         this.bot.on('edited_message', (msg) => this.handleEdited(msg));
+        // channel posts (new messages in channel) for live history tracking
+        this.bot.on('channel_post', (msg) => this.handleChannelPost(msg));
+        this.bot.on('edited_channel_post', (msg) => this.handleEdited(msg));
     }
 
     async handleStart(msg) {
@@ -78,42 +82,85 @@ class BotService {
     }
 
     /**
-     * Synchronize channel history into our local file.
-     * Posts already present are skipped; new entries are summarized and added.
-     * This method is safe to call multiple times; it will only touch missing IDs.
+     * Handle /sync (manual trigger).
+     * Calls syncHistory in background and notifies the admin of completion.
      */
-    /**
-     * Synchronize channel history into our local file.
-     * @param {boolean} silent - when true, do not send messages to admin; used at startup.
-     */
+    async handleSyncCommand(msg) {
+        const userId = msg.from.id;
+        if (!this.isAdmin(userId)) return;
+        await this.sendMessage(userId, 'Запускаю синхронизацию истории (в фоне). Пожалуйста, подождите.');
+        this.syncHistory().catch(e => {
+            console.error('manual sync error', e);
+            this.sendMessage(userId, 'Синхронизация завершилась с ошибкой.');
+        });
+    }
+
     async syncHistory(silent = false) {
         await this.prefixReady;
-        const existing = new Set((await HistoryRepository.getAll()).map(r => Number(r.messageId)));
+        // build set of existing group identifiers too (groupId or messageId)
+        const existingRecords = await HistoryRepository.getAll();
+        const existingGroups = new Set();
+        for (const r of existingRecords) {
+            if (r.groupId) existingGroups.add(String(r.groupId));
+            existingGroups.add(String(r.messageId));
+        }
         let added = 0;
-        const maxExisting = existing.size ? Math.max(...existing) : 0;
-        // start scanning from first possible id (1) or after known ones
-        const startId = existing.size ? maxExisting + 1 : 1;
-        // cap the scan range so we don't loop forever; assume channel won't exceed 5000 posts
-        const CAP = startId + 5000;
-        for (let id = startId; id <= CAP; id++) {
-            if (existing.has(id)) continue;
+        const foundIds = new Set();
+        const maxExisting = existingRecords.length ? Math.max(...existingRecords.map(r => Number(r.messageId))) : 0;
+        const MAX_SEARCH = 1000000; // scan up to a million IDs to be safe
+        let consecutiveMisses = 0;
+        for (let id = 1; id <= MAX_SEARCH; id++) {
+            if (existingGroups.has(String(id))) {
+                consecutiveMisses = 0;
+                continue;
+            }
             try {
                 const copy = await this.bot.copyMessage(ADMIN_ID, CHANNEL_ID, id);
-                if (copy && copy.message_id) {
-                    await this.bot.deleteMessage(ADMIN_ID, copy.message_id).catch(() => {});
-                }
+                // record that we found this id
+                foundIds.add(id);
+                // note: copied messages are left in the admin chat
                 const text = (copy.text || '') + (copy.caption ? '\n' + copy.caption : '');
                 let summary = null;
                 if (!text.trim()) {
-                    summary = { main: '<медиа>', description: '<медиа>' };
+                    const mt = require('./MediaType').detect(copy);
+                    summary = { main: `<${mt}>`, description: `<${mt}>` };
                 } else {
                     summary = await SummaryService.summarize(text);
+                    if (!summary) {
+                        console.warn('no summary generated for message', id, 'text=', text.slice(0,100));
+                    }
                 }
-                await HistoryRepository.addPublished('', CHANNEL_ID, id, summary, copy.date || null);
+                const groupId = copy.media_group_id || null;
+                const replyTo = copy.reply_to_message && copy.reply_to_message.message_id ? copy.reply_to_message.message_id : null;
+                if (groupId && existingGroups.has(String(groupId))) {
+                    existingGroups.add(String(id));
+                    continue;
+                }
+                await HistoryRepository.addPublished('', CHANNEL_ID, id, summary, copy.date || null, groupId, replyTo);
                 added++;
-                existing.add(id);
+                existingGroups.add(String(id));
+                if (groupId) existingGroups.add(String(groupId));
+                consecutiveMisses = 0;
             } catch (e) {
-                // ignore errors; missing message IDs are normal
+                consecutiveMisses++;
+                if (id > maxExisting && consecutiveMisses >= 500) break;
+            }
+        }
+        // ensure we also check previously known records that we may have skipped
+        for (const r of existingRecords) {
+            if (!foundIds.has(Number(r.messageId))) {
+                try {
+                    await this.bot.copyMessage(ADMIN_ID, CHANNEL_ID, r.messageId);
+                    foundIds.add(Number(r.messageId));
+                } catch {}
+            }
+        }
+        // remove stale records that were not found after all checks
+        if (foundIds.size > 0) {
+            const all = await HistoryRepository._read();
+            const kept = all.records.filter(r => foundIds.has(Number(r.messageId)));
+            if (kept.length !== all.records.length) {
+                await HistoryRepository._write({ records: kept });
             }
         }
         if (!silent) {
@@ -159,18 +206,42 @@ class BotService {
             return this.sendMessage(userId, 'Выберите действие:', MenuService.getMainMenu());
         }
         // build a single text message with all entries (limit to 50 for safety)
-        const header = 'История публикаций' + (term ? ` (по «${term}»)` : '') + ' (новейшие сверху)';
+        const count = filtered.length;
+        const header = 'История публикаций' +
+            (term ? ` (по «${term}»)` : '') +
+            ` – всего ${count} ${count === 1 ? 'запись' : 'записей'}` +
+            ' (старые сверху, новые снизу)';
         let text = header + '\n\n';
         const limit = 50;
         for (let i = 0; i < Math.min(filtered.length, limit); i++) {
             const r = filtered[i];
             const url = this.channelUrlPrefix ? `${this.channelUrlPrefix}/${r.messageId}` : '';
-            // topic is main idea, description carries the detailed message
-            const topic = r.main || r.title || `пост ${i+1}`;
-            text += `${i+1}. *${topic}*`;
-            text += '\n';
-            const desc = r.description || r.main || '';
-            if (desc) text += `${desc}\n`;
+            // header/title
+            const headerLine = r.title || r.main || `<медиа>`;
+            text += `*${headerLine}*\n`;
+            // reply information
+            if (r.replyTo) {
+                const parentUrl = this.channelUrlPrefix ? `${this.channelUrlPrefix}/${r.replyTo}` : '';
+                text += `(ответ на пост ${r.replyTo}${parentUrl ? ` [↪](${parentUrl})` : ''})\n`;
+            }
+            // main idea (if distinct from title)
+            if (r.main && r.main !== r.title) {
+                text += `${r.main}\n`;
+            }
+            // description
+            if (r.description && r.description !== r.main) {
+                text += `${r.description}\n`;
+            }
+            // add local date before link
+            if (r.publishedAt) {
+                const d = new Date(r.publishedAt);
+                const fmt = new Intl.DateTimeFormat('ru-RU', {
+                    timeZone: 'Europe/Minsk',
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit'
+                });
+                text += `${fmt.format(d)}\n`;
+            }
             if (url) text += `[Ссылка на пост](${url})\n`;
             text += '\n';
         }
@@ -241,9 +312,10 @@ class BotService {
             await this.clearState(userId);
             // convert history to CSV for easier viewing
             const recs = await HistoryRepository.getAll();
-            let csv = 'publishedAt,userId,chatId,messageId,title,main,description,keywords\n';
+            let csv = 'publishedAt,userId,chatId,messageId,replyTo,link,title,main,description,keywords\n';
             for (const r of recs) {
-                const line = [r.publishedAt, r.userId, r.chatId, r.messageId,
+                const link = this.channelUrlPrefix ? `${this.channelUrlPrefix}/${r.messageId}` : '';
+                const line = [r.publishedAt, r.userId, r.chatId, r.messageId, r.replyTo || '', link,
                     r.title, r.main, r.description,
                     (r.keywords||[]).join('|')]
                     .map(v => '"' + String(v||'').replace(/"/g,'""') + '"')
@@ -407,8 +479,9 @@ class BotService {
 
         let state = stateManager.get(userId);
         if (!state) return;
+        // never delete previous preview messages per requirement; we simply ignore the preview field
         if (state.preview) {
-            this.bot.deleteMessage(userId, state.preview).catch(() => {});
+            // keep preview record but no cleanup
             delete state.preview;
             stateManager.set(userId, state);
         }
@@ -424,7 +497,7 @@ class BotService {
 
         if (state.mode === 'waiting_edit') {
             const copied = await this.bot.copyMessage(userId, msg.chat.id, msg.message_id).catch(() => null);
-            if (state.chatId && state.messageId) this.bot.deleteMessage(state.chatId, state.messageId).catch(() => {});
+            // do not delete any existing messages
             if (copied && copied.message_id) state.preview = copied.message_id;
             await DraftService.update(state.draftId, userId, msg.chat.id, msg.message_id);
             await this.sendMessage(userId, 'Черновик обновлён ✅', MenuService.getMainMenu());
@@ -485,6 +558,26 @@ class BotService {
         if (summary) {
             await HistoryRepository.updateSummary(msg.message_id, summary);
         }
+    }
+
+    async handleChannelPost(msg) {
+        if (!msg || !msg.chat) return;
+        if (String(msg.chat.id) !== String(CHANNEL_ID)) return;
+        // a new message appeared in channel; add to history
+        const text = (msg.text || '') + (msg.caption ? '\n' + msg.caption : '');
+        let summary = null;
+        if (!text.trim()) {
+            const mt = require('./MediaType').detect(msg);
+            summary = { main: `<${mt}>`, description: `<${mt}>` };
+        } else {
+            summary = await SummaryService.summarize(text);
+            if (!summary) {
+                console.warn('no summary generated for channel post', msg.message_id, 'text=', text.slice(0,100));
+            }
+        }
+        const groupId = msg.media_group_id || null;
+        const replyTo = msg.reply_to_message && msg.reply_to_message.message_id ? msg.reply_to_message.message_id : null;
+        await HistoryRepository.addPublished('', CHANNEL_ID, msg.message_id, summary, msg.date || null, groupId, replyTo);
     }
 }
 
