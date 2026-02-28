@@ -1,6 +1,6 @@
 const { CHANNEL_ID } = require('../config');
-const HistoryRepository = require('./HistoryRepository');
-const SummaryService = require('./SummaryService');
+const ExistingPosts = require('./ExistingPosts');
+const { detect: detectMediaType } = require('./MediaType');
 
 class PostService {
     constructor(bot) { this.bot = bot; }
@@ -9,26 +9,31 @@ class PostService {
     async publish(userId, chatId, messageId) {
         const msg = await this.bot.copyMessage(CHANNEL_ID, chatId, messageId);
         const text = (msg.text || '') + (msg.caption ? '\n' + msg.caption : '');
-        let summary = null;
-        if (!text.trim()) {
-            const mt = require('./MediaType').detect(msg);
-            summary = { main: `<${mt}>`, description: `<${mt}>` };
-        } else {
-            try {
-                summary = await SummaryService.summarize(text);
-                if (!summary) {
-                    console.warn('no summary generated for publish text', text.slice(0,100));
-                }
-            } catch (e) {
-                console.error('SummaryService failed', e);
-            }
+
+        // Определяем информацию о медиа
+        let mediaInfo = null;
+        if (msg.photo && msg.photo.length > 0) {
+            mediaInfo = { type: 'фото', count: msg.photo.length };
+        } else if (msg.video) {
+            mediaInfo = { type: 'видео', count: 1 };
+        } else if (msg.audio) {
+            mediaInfo = { type: 'аудио', count: 1 };
+        } else if (msg.voice) {
+            mediaInfo = { type: 'голос', count: 1 };
+        } else if (msg.document) {
+            mediaInfo = { type: 'документ', count: 1 };
+        } else if (msg.sticker) {
+            mediaInfo = { type: 'стикер', count: 1 };
         }
-        if (!summary) summary = {};
-        // try to preserve the original post date if available
-        const sentDate = msg.date || null;
-        const groupId = msg.media_group_id || null; // only media albums
-        const replyTo = msg.reply_to_message && msg.reply_to_message.message_id ? msg.reply_to_message.message_id : null;
-        await HistoryRepository.addPublished(userId || '', chatId, msg.message_id, summary, sentDate, groupId, replyTo);
+
+        // Проверяем, это ответ на другой пост или нет
+        const replyTo = msg.reply_to_message ? msg.reply_to_message.message_id : null;
+
+        // Добавляем пост в ExistingPosts
+        await ExistingPosts.addPost(msg.message_id, text, mediaInfo, replyTo);
+
+        console.log(`Пост #${msg.message_id} опубликован и добавлен в ExistingPosts`);
+
         return msg;
     }
 }

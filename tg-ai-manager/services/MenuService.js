@@ -4,20 +4,7 @@ class MenuService {
             reply_markup: {
                 inline_keyboard: [
                     [{ text: "📢 Публикация", callback_data: "menu_publish" }],
-                    [{ text: "📝 Черновики", callback_data: "menu_drafts" }],
-                    [{ text: "📚 История", callback_data: "menu_history" }]
-                ]
-            }
-        };
-    }
-
-    static getHistorySourceMenu() {
-        return {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "💬 В чате", callback_data: "history_chat" }],
-                    [{ text: "📁 В файле", callback_data: "history_file" }],
-                    [{ text: "↩️ Главное меню", callback_data: "cancel" }]
+                    [{ text: "📝 Черновики", callback_data: "menu_drafts" }]
                 ]
             }
         };
