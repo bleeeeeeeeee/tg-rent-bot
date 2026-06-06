@@ -1,0 +1,375 @@
+const ExistingPosts = require('./ExistingPosts');
+const PostRepository = require('./PostRepository');
+const PostGraphService = require('./PostGraphService');
+const { shouldHideFromList, getAlbumParts, countAlbumMedia, isEmptyPost } = require('../utils/albumPosts');
+const { buildPostUrl } = require('../utils/channelUrl');
+const SettingsService = require('./SettingsService');
+
+const PAGE_SIZE = 8;
+
+const FILTER_LABELS = {
+  published: 'Вышедшие',
+  scheduled: 'В очереди',
+  deleted: 'Удалённые',
+  all: 'Все посты'
+};
+
+const LIFECYCLE_LABELS = {
+  active: '',
+  edited: '✏️ ',
+  deleted: '🗑 '
+};
+
+class HistoryService {
+  static truncatePreview(text, max = 120) {
+    if (!text?.trim()) return 'Без текста';
+    const t = text.replace(/\s+/g, ' ').trim();
+    return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+  }
+
+  static getDisplayPreview(post) {
+    if (post.title?.trim()) return post.title;
+    if (post.mainIdea?.trim()) return post.mainIdea;
+    return post.post || post.preview || '';
+  }
+
+  static formatDate(iso, timezone) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('ru-RU', { timeZone: timezone });
+  }
+
+  static formatShortDate(iso, timezone) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('ru-RU', {
+      timeZone: timezone,
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  static _lifecyclePrefix(status) {
+    return LIFECYCLE_LABELS[status] || '';
+  }
+
+  static _listTitle(post) {
+    const id = post.id ?? post.channelMessageId;
+    if (post.title?.trim()) return this.truncatePreview(post.title, 42);
+    if (post.mainIdea?.trim()) return this.truncatePreview(post.mainIdea, 42);
+    const body = post.post || post.preview || '';
+    if (body.trim()) return this.truncatePreview(body, 42);
+    if (post.media) return `Медиа #${id}`;
+    return id ? `Пост #${id}` : 'Без названия';
+  }
+
+  static _buildButtonLabel(kind, sortAt, post, timezone) {
+    const date = this.formatShortDate(sortAt, timezone);
+    const prefix = post.lifecycleStatus ? this._lifecyclePrefix(post.lifecycleStatus) : '';
+    const title = this._listTitle(post);
+    return prefix ? `${date} · ${prefix}${title}` : `${date} · ${title}`;
+  }
+
+  static async _loadDeleted(timezone) {
+    const allPosts = await ExistingPosts.getAll();
+    const posts = allPosts
+      .filter((p) => p.lifecycleStatus === 'deleted')
+      .filter((p) => !shouldHideFromList(p, allPosts))
+      .filter((p) => !isEmptyPost(p));
+
+    return posts.map((p) => ({
+      kind: 'published',
+      refId: String(p.id),
+      sortAt: p.deletedAt || p.added,
+      preview: p.post,
+      title: p.title,
+      mainIdea: p.mainIdea,
+      tags: p.tags,
+      category: p.category,
+      keywords: p.keywords,
+      media: p.media,
+      channelMessageId: p.id,
+      channelUrl: buildPostUrl(p.id),
+      replyTo: p.replyTo,
+      replyToMissing: p.replyToMissing,
+      lifecycleStatus: p.lifecycleStatus,
+      editedAt: p.editedAt,
+      deletedAt: p.deletedAt,
+      postOriginal: p.postOriginal,
+      buttonLabel: this._buildButtonLabel('published', p.deletedAt || p.added, p, timezone)
+    }));
+  }
+
+  static async _loadPublished(timezone) {
+    let allPosts = await ExistingPosts.getAll();
+    let posts = allPosts.filter((p) => p.lifecycleStatus !== 'deleted');
+    posts = posts.filter((p) => !shouldHideFromList(p, allPosts));
+    posts = posts.filter((p) => !isEmptyPost(p));
+    return posts.map((p) => ({
+      kind: 'published',
+      refId: String(p.id),
+      sortAt: p.lifecycleStatus === 'deleted' ? p.deletedAt || p.added : p.added,
+      preview: p.post,
+      title: p.title,
+      mainIdea: p.mainIdea,
+      tags: p.tags,
+      category: p.category,
+      keywords: p.keywords,
+      media: p.media,
+      channelMessageId: p.id,
+      channelUrl: buildPostUrl(p.id),
+      replyTo: p.replyTo,
+      replyToMissing: p.replyToMissing,
+      lifecycleStatus: p.lifecycleStatus,
+      editedAt: p.editedAt,
+      deletedAt: p.deletedAt,
+      postOriginal: p.postOriginal,
+      buttonLabel: this._buildButtonLabel('published', p.added, p, timezone)
+    }));
+  }
+
+  static async _loadScheduled(timezone) {
+    const pending = await PostRepository.getAllPending();
+    return pending.map((p) => ({
+      kind: 'scheduled',
+      refId: p.id,
+      sortAt: p.publishAt,
+      publishAt: p.publishAt,
+      preview: p.preview,
+      media: p.media,
+      status: p.status,
+      sourceChatId: p.chatId,
+      sourceMessageId: p.messageId,
+      lifecycleStatus: 'scheduled',
+      buttonLabel: this._buildButtonLabel(
+        'scheduled',
+        p.publishAt,
+        { preview: p.preview, id: p.id },
+        timezone
+      )
+    }));
+  }
+
+  static _sortItems(items, filter) {
+    const copy = [...items];
+    if (filter === 'scheduled') {
+      copy.sort((a, b) => new Date(a.sortAt) - new Date(b.sortAt));
+    } else {
+      copy.sort((a, b) => new Date(b.sortAt) - new Date(a.sortAt));
+    }
+    return copy;
+  }
+
+  static async list({ filter = 'published', page = 0, pageSize = PAGE_SIZE } = {}) {
+    const timezone = await SettingsService.getTimezone();
+    let items = [];
+
+    if (filter === 'published' || filter === 'all') {
+      items = items.concat(await this._loadPublished(timezone));
+    }
+    if (filter === 'deleted' || filter === 'all') {
+      items = items.concat(await this._loadDeleted(timezone));
+    }
+    if (filter === 'scheduled' || filter === 'all') {
+      items = items.concat(await this._loadScheduled(timezone));
+    }
+
+    items = this._sortItems(items, filter);
+
+    const total = items.length;
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const safePage = Math.min(Math.max(0, page), pages - 1);
+    const slice = items.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
+    return {
+      items: slice,
+      total,
+      pages,
+      page: safePage,
+      filter,
+      filterLabel: FILTER_LABELS[filter] || filter
+    };
+  }
+
+  static async getItem({ kind, refId }) {
+    if (kind === 'published') {
+      let p = await ExistingPosts.getById(refId);
+      if (!p) return null;
+      if (p.albumPrimaryId) {
+        p = await ExistingPosts.getById(p.albumPrimaryId);
+        if (!p) return null;
+      }
+      const allPosts = await ExistingPosts.getAll();
+      const albumParts = getAlbumParts(p, allPosts);
+      const replyContext = await PostGraphService.buildReplyContext(p.id);
+      return {
+        kind: 'published',
+        refId: String(p.id),
+        sortAt: p.added,
+        preview: p.post,
+        title: p.title,
+        mainIdea: p.mainIdea,
+        tags: p.tags,
+        category: p.category,
+        keywords: p.keywords,
+        media: p.media,
+        channelMessageId: p.id,
+        channelUrl: buildPostUrl(p.id),
+        replyTo: p.replyTo,
+        replyToMissing: p.replyToMissing,
+        lifecycleStatus: p.lifecycleStatus,
+        editedAt: p.editedAt,
+        deletedAt: p.deletedAt,
+        postOriginal: p.postOriginal,
+        albumParts,
+        albumMediaCount: countAlbumMedia(p, allPosts),
+        replyContext
+      };
+    }
+
+    if (kind === 'scheduled') {
+      const p = await PostRepository.getById(refId);
+      if (!p || p.status !== 'pending') return null;
+      return {
+        kind: 'scheduled',
+        refId: p.id,
+        sortAt: p.publishAt,
+        publishAt: p.publishAt,
+        preview: p.preview,
+        media: p.media,
+        status: p.status,
+        sourceChatId: p.chatId,
+        sourceMessageId: p.messageId
+      };
+    }
+
+    return null;
+  }
+
+  static formatListHeader(result) {
+    const { filterLabel, total, page, pages } = result;
+    if (total === 0) {
+      return `📚 <b>История постов</b>\n\nРежим: ${filterLabel}\nПостов нет.`;
+    }
+    return (
+      `📚 <b>История постов</b>\n\n` +
+      `Режим: ${filterLabel}\n` +
+      `Всего: ${total} · стр. ${page + 1}/${pages}`
+    );
+  }
+
+  static _formatLifecycleBlock(item, timezone) {
+    const lines = [];
+    if (item.lifecycleStatus === 'edited') {
+      lines.push(`✏️ <b>Изменён</b> · ${this.formatDate(item.editedAt, timezone)}`);
+    }
+    if (item.lifecycleStatus === 'deleted') {
+      lines.push(`🗑 <b>Удалён из канала</b> · ${this.formatDate(item.deletedAt, timezone)}`);
+    }
+    return lines;
+  }
+
+  static _formatAiBlock(item) {
+    const lines = [];
+    if (item.category) lines.push(`📂 Категория: ${this._escapeHtml(item.category)}`);
+    if (item.tags?.length) lines.push(`🏷 Теги: ${this._escapeHtml(item.tags.join(', '))}`);
+    if (item.keywords?.length) lines.push(`🔑 Ключевые слова: ${this._escapeHtml(item.keywords.join(', '))}`);
+    return lines;
+  }
+
+  static _formatReplyBlock(item) {
+    const lines = [];
+    const ctx = item.replyContext;
+    if (!ctx) return lines;
+
+    if (ctx.post.replyTo) {
+      if (ctx.parent) {
+        const label = HistoryService.truncatePreview(
+          HistoryService.getDisplayPreview(ctx.parent),
+          50
+        );
+        lines.push(`↩️ Ответ на #${ctx.post.replyTo}: ${HistoryService._escapeHtml(label)}`);
+      } else if (ctx.parentMissing || ctx.post.replyToMissing) {
+        lines.push(`↩️ Ответ на #${ctx.post.replyTo} (не в архиве)`);
+      } else {
+        lines.push(`↩️ Ответ на #${ctx.post.replyTo}`);
+      }
+    }
+
+    if (ctx.children?.length) {
+      const ids = ctx.children.map((c) => `#${c.id}`).join(', ');
+      lines.push(`💬 Ответы (${ctx.children.length}): ${ids}`);
+    }
+
+    return lines;
+  }
+
+  static async formatPublishedCard(item) {
+    const timezone = await SettingsService.getTimezone();
+    const statusIcon =
+      item.lifecycleStatus === 'deleted' ? '🗑' : item.lifecycleStatus === 'edited' ? '✏️' : '✅';
+    const lines = [`${statusIcon} <b>Пост #${item.channelMessageId}</b>`, ''];
+
+    lines.push(...this._formatLifecycleBlock(item, timezone));
+
+    if (item.title) lines.push(`<b>${this._escapeHtml(item.title)}</b>`);
+    if (item.mainIdea) lines.push(`💡 Суть: ${this._escapeHtml(item.mainIdea)}`);
+
+    const aiLines = this._formatAiBlock(item);
+    if (aiLines.length) {
+      lines.push('');
+      lines.push(...aiLines);
+    }
+
+    lines.push('', `📅 Добавлен: ${this.formatDate(item.sortAt, timezone)}`);
+    if (item.media) lines.push(`🖼 Медиа: ${item.media.type}`);
+    if (item.albumMediaCount > 1) {
+      const ids = [item.channelMessageId, ...(item.albumParts || []).map((p) => p.id)];
+      lines.push(`🖼 Альбом: ${item.albumMediaCount} файлов (${ids.map((id) => `#${id}`).join(', ')})`);
+    }
+
+    const replyLines = this._formatReplyBlock(item);
+    if (replyLines.length) {
+      lines.push('');
+      lines.push(...replyLines);
+    }
+
+    lines.push('');
+    if (item.lifecycleStatus === 'deleted') {
+      lines.push('<s>' + (item.preview?.trim()
+        ? this._escapeHtml(item.preview)
+        : '<i>Без текста</i>') + '</s>');
+    } else {
+      lines.push(
+        item.preview?.trim() ? this._escapeHtml(item.preview) : '<i>Без текста</i>'
+      );
+    }
+
+    if (item.postOriginal && item.lifecycleStatus === 'edited') {
+      lines.push('', `<i>Было:</i> ${this._escapeHtml(this.truncatePreview(item.postOriginal, 300))}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  static async formatScheduledCard(item) {
+    const timezone = await SettingsService.getTimezone();
+    const lines = ['📅 <b>Запланированный пост</b>', ''];
+    lines.push(`⏰ Публикация: ${this.formatDate(item.publishAt, timezone)}`);
+    if (item.media) lines.push(`🖼 Медиа: ${item.media.type}`);
+    lines.push('');
+    lines.push(
+      item.preview?.trim() ? this._escapeHtml(item.preview) : '<i>Без текста</i>'
+    );
+    return lines.join('\n');
+  }
+
+  static _escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+}
+
+module.exports = HistoryService;

@@ -4,7 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "import:channel": "node scripts/import-channel-posts.js",
+    "import:export": "node scripts/import-from-export.js",
+    "reconcile": "node scripts/reconcile-channel.js",
+    "enrich": "node scripts/enrich-all.js",
+    "gram:login": "node scripts/gram-login.js"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +18,8 @@
   "dependencies": {
     "dotenv": "^17.3.1",
     "node-telegram-bot-api": "^0.67.0",
+    "openai": "^6.25.0",
+    "telegram": "^2.26.22",
     "uuid": "^9.0.0"
   }
 }
