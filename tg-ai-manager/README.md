@@ -36,6 +36,7 @@ CHANNEL_ID=@my_channel
 |------------|-------|--------------|
 | `BOT_TOKEN` | Токен бота для API Telegram | 1. Напишите [@BotFather](https://t.me/BotFather)<br>2. `/newbot` или выберите существующего<br>3. Скопируйте токен вида `123456789:AAH...` |
 | `ADMIN_ID` | Единственный пользователь, которому бот отвечает | 1. Напишите [@userinfobot](https://t.me/userinfobot) или [@getmyid_bot](https://t.me/getmyid_bot)<br>2. Скопируйте **Id** (число, например `987654321`) |
+| `OWNER_TELEGRAM_ID` | То же, что `ADMIN_ID` (рекомендуется в облаке) | Владелец канала; получает уведомления о публикации |
 | `CHANNEL_ID` | Канал, которым управляет бот | Публичный: `@username_канала` (с `@`).<br>Приватный: числовой id `-1001234567890` — узнать через [@getmyid_bot](https://t.me/getmyid_bot), переслав сообщение из канала, или из URL в веб-версии Telegram |
 
 **Канал и бот:** добавьте бота в канал как **администратора** (достаточно права публиковать сообщения и читать историю, если доступно).
@@ -46,6 +47,18 @@ CHANNEL_ID=@my_channel
 |------------|-------|--------------|
 | `TIMEZONE` | Часовой пояс для истории и расписания | IANA-имя, по умолчанию `Europe/Moscow`. Примеры: `UTC`, `Europe/Kiev`, `Asia/Almaty`. Тот же формат можно сменить в боте: Настройки → Основные. |
 | `OPENAI_API_KEY` | Стартовый ключ OpenAI | [platform.openai.com](https://platform.openai.com/api-keys). Можно не указывать — ключи всех ИИ-сервисов можно добавить в боте: Настройки → ИИ для постов. |
+
+### Облако (Supabase)
+
+| Переменная | Значение |
+|------------|----------|
+| `STORAGE_BACKEND` | `file` (по умолчанию), `supabase` или `dual` |
+| `SUPABASE_URL` | URL проекта Supabase |
+| `SUPABASE_SERVICE_KEY` | service_role key (только на сервере) |
+| `SYNC_ENABLED` | `true` для dual-sync с локальными файлами |
+| `INSTANCE_ID` | Уникальный id инстанса (для heartbeat) |
+
+Подробнее — раздел [Облачный запуск](#облачный-запуск-247) ниже.
 
 ### Переменные для импорта постов (GramJS)
 
@@ -172,6 +185,88 @@ npm run enrich -- --force
 | `drafts.json` | Черновики |
 | `settings.json` | Настройки бота |
 | `secrets.json` | Ключи API (из бота) |
+
+---
+
+## Облачный запуск (24/7)
+
+Бот может работать круглосуточно на VPS с общей базой **Supabase** (бесплатный tier). Локальный ПК и облако используют **одни данные** через Postgres — это не два бота с одним `BOT_TOKEN` (одновременный polling с одним токеном невозможен).
+
+### Стек
+
+| Компонент | Сервис |
+|-----------|--------|
+| БД + Realtime | [Supabase Free](https://supabase.com/pricing) |
+| VPS 24/7 | [Oracle Cloud Always Free](https://www.oracle.com/cloud/free/) (ARM VM) или Docker-хост |
+
+### Supabase
+
+1. Создайте проект на [supabase.com](https://supabase.com).
+2. SQL Editor → выполните [`supabase/migrations/001_initial.sql`](supabase/migrations/001_initial.sql).
+3. Settings → API: скопируйте **Project URL** и **service_role** key (не anon key).
+
+### Переменные `.env` на VPS
+
+```env
+STORAGE_BACKEND=supabase
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_SERVICE_KEY=eyJ...
+OWNER_TELEGRAM_ID=123456789
+BOT_TOKEN=...
+CHANNEL_ID=@channel
+INSTANCE_ID=vps-1
+```
+
+Локально с синхронизацией:
+
+```env
+STORAGE_BACKEND=dual
+SUPABASE_URL=...
+SUPABASE_SERVICE_KEY=...
+SYNC_ENABLED=true
+```
+
+### Деплой на Oracle Free (Ubuntu)
+
+```bash
+sudo apt update && sudo apt install -y git nodejs npm
+sudo git clone <repo> /opt/tg-ai-manager
+cd /opt/tg-ai-manager
+cp .env.example .env   # заполните
+npm install
+sudo cp deploy/tg-ai-manager.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tg-ai-manager
+sudo journalctl -u tg-ai-manager -f
+```
+
+### Docker
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+Volume `storage/` — для локального backup; при `STORAGE_BACKEND=supabase` основные данные в Postgres.
+
+**Резервное копирование (cron):**
+
+```bash
+# каждый день в 03:00
+0 3 * * * cd /path/to/tg-ai-manager && npm run backup:export >> storage/backups/cron.log 2>&1
+```
+
+Файлы сохраняются в `storage/backups/`.
+
+### Настройки в боте
+
+**Настройки:** AI, внешний вид, часовой пояс, язык (ru/en).
+
+**Админ-панель (`/admin`):** доступ (мастер-пароль, коды, сеансы, журнал, права гостя), облако (push/pull с предупреждением о конфликте), система, обслуживание и backup.
+
+Гости видят ограниченное меню; редактирование черновиков включается в админке.
+
+---
 
 ## Архив канала
 

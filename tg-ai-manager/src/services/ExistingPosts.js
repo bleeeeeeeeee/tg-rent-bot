@@ -1,5 +1,4 @@
-const fs = require('fs').promises;
-const path = require('path');
+const JsonStore = require('../storage/JsonStore');
 const { computeContentHash } = require('../utils/contentHash');
 const {
   pickAlbumPrimary,
@@ -8,7 +7,6 @@ const {
   isEmptyPost
 } = require('../utils/albumPosts');
 
-const FILE_PATH = path.join(__dirname, '../../storage/existing_posts.json');
 const SCHEMA_VERSION = 3;
 
 function normalizePost(raw) {
@@ -76,13 +74,17 @@ function createPostRecord({
 class ExistingPosts {
   static async _read() {
     try {
-      const data = await fs.readFile(FILE_PATH, 'utf8');
-      const parsed = JSON.parse(data);
-      const posts = (parsed?.posts || []).map(normalizePost);
-      return { posts, schemaVersion: parsed?.schemaVersion ?? 1 };
+      const parsed = await JsonStore.read('existing_posts', { schemaVersion: SCHEMA_VERSION, posts: [] });
+      if (parsed?.posts) {
+        return {
+          schemaVersion: parsed.schemaVersion || SCHEMA_VERSION,
+          posts: parsed.posts.map(normalizePost)
+        };
+      }
+      return { schemaVersion: SCHEMA_VERSION, posts: [] };
     } catch (err) {
       console.error('[ExistingPosts] Read error:', err.message);
-      return { posts: [], schemaVersion: SCHEMA_VERSION };
+      return { schemaVersion: SCHEMA_VERSION, posts: [] };
     }
   }
 
@@ -91,11 +93,10 @@ class ExistingPosts {
       if (!data || !Array.isArray(data.posts)) {
         throw new Error('Invalid data structure');
       }
-      await fs.writeFile(
-        FILE_PATH,
-        JSON.stringify({ schemaVersion: SCHEMA_VERSION, posts: data.posts }, null, 2),
-        'utf8'
-      );
+      await JsonStore.write('existing_posts', {
+        schemaVersion: SCHEMA_VERSION,
+        posts: data.posts
+      });
     } catch (err) {
       console.error('[ExistingPosts] Write error:', err.message);
       throw err;
@@ -108,8 +109,7 @@ class ExistingPosts {
       let currentVersion = 1;
 
       try {
-        const raw = await fs.readFile(FILE_PATH, 'utf8');
-        const parsed = JSON.parse(raw);
+        const parsed = await JsonStore.read('existing_posts', { schemaVersion: 1, posts: [] });
         rawPosts = parsed?.posts || [];
         currentVersion = parsed?.schemaVersion ?? 1;
       } catch (err) {

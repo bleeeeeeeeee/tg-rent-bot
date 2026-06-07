@@ -1,4 +1,12 @@
 class MenuService {
+    static async _loc() {
+        return require('./SettingsService').getLocale();
+    }
+
+    static _t(key, locale, params) {
+        return require('../i18n').t(key, params, locale);
+    }
+
     static async _ui(ui) {
         if (ui) return ui;
         return require('./UiStyleService').get();
@@ -14,15 +22,27 @@ class MenuService {
         return require('./UiStyleService').selectedMark(ui);
     }
 
-    static async getMainMenu(ui = null) {
+    static async getMainMenu(ui = null, { role = 'owner', locale = null } = {}) {
         ui = await this._ui(ui);
+        const loc = locale || await this._loc();
+        if (role === 'guest') {
+            return {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: this._L(ui, '📚', this._t('menu.main.history', loc)), callback_data: 'menu_history' }],
+                        [{ text: this._L(ui, '📝', this._t('menu.main.drafts', loc)), callback_data: 'menu_drafts' }],
+                        [{ text: this._L(ui, '🚪', this._t('menu.main.logout', loc)), callback_data: 'access_logout' }]
+                    ]
+                }
+            };
+        }
         return {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: this._L(ui, '📢', 'Публикация'), callback_data: 'menu_publish' }],
-                    [{ text: this._L(ui, '📝', 'Черновики'), callback_data: 'menu_drafts' }],
-                    [{ text: this._L(ui, '📚', 'История'), callback_data: 'menu_history' }],
-                    [{ text: this._L(ui, '⚙️', 'Настройки'), callback_data: 'menu_settings' }]
+                    [{ text: this._L(ui, '📢', this._t('menu.main.publish', loc)), callback_data: 'menu_publish' }],
+                    [{ text: this._L(ui, '📝', this._t('menu.main.drafts', loc)), callback_data: 'menu_drafts' }],
+                    [{ text: this._L(ui, '📚', this._t('menu.main.history', loc)), callback_data: 'menu_history' }],
+                    [{ text: this._L(ui, '⚙️', this._t('menu.main.settings', loc)), callback_data: 'menu_settings' }]
                 ]
             }
         };
@@ -464,16 +484,17 @@ class MenuService {
         return { reply_markup: { inline_keyboard: rows } };
     }
 
-    static getSettingsRootMenu(ui = null) {
+    static async getSettingsRootMenu(ui = null, locale = null) {
         const UiStyleService = require('./UiStyleService');
         const style = ui || { useEmojis: true, navStyle: 'text' };
+        const loc = locale || await this._loc();
         return {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: UiStyleService.optionalEmoji(style, '📖', 'Инструкция'), callback_data: 'settings_help' }],
-                    [{ text: UiStyleService.optionalEmoji(style, '🤖', 'ИИ для постов'), callback_data: 'settings_ai' }],
-                    [{ text: UiStyleService.optionalEmoji(style, '🎨', 'Оформление'), callback_data: 'settings_appearance' }],
-                    [{ text: UiStyleService.optionalEmoji(style, '🌍', 'Основные'), callback_data: 'settings_general' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '📖', this._t('settings.help', loc)), callback_data: 'settings_help' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '🤖', this._t('settings.ai', loc)), callback_data: 'settings_ai' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '🎨', this._t('settings.appearance', loc)), callback_data: 'settings_appearance' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '🌍', this._t('settings.general', loc)), callback_data: 'settings_general' }],
                     [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
                 ]
             }
@@ -507,15 +528,25 @@ class MenuService {
         };
     }
 
-    static getSettingsAiMenu(activeProvider, autoEnrich, configuredIds) {
+    static async getSettingsAiMenu(activeProvider, autoEnrich, configuredIds, locale = null) {
+        const SettingsService = require('./SettingsService');
+        const loc = locale || await this._loc();
+        const customCount = (await SettingsService.getCustomProviders()).length;
         const keyboard = [
-            [{ text: '🔀 Сменить нейросеть', callback_data: 'settings_ai_pick_list' }],
-            [{ text: '➕ Подключить сервис', callback_data: 'settings_ai_add' }],
-            [{
-                text: autoEnrich ? '🔕 Выключить автоанализ' : '🔔 Включить автоанализ',
-                callback_data: 'settings_ai_toggle_enrich'
-            }]
+            [{ text: '🔀 ' + (loc === 'en' ? 'Switch model' : 'Сменить нейросеть'), callback_data: 'settings_ai_pick_list' }],
+            [{ text: '➕ ' + (loc === 'en' ? 'Add service' : 'Подключить сервис'), callback_data: 'settings_ai_add' }],
+            [{ text: '⚙️ ' + this._t('settings.ai.custom_api', loc), callback_data: 'settings_ai_custom_start' }]
         ];
+        if (customCount > 0) {
+            keyboard.push([{
+                text: '✏️ ' + this._t('settings.ai.custom.edit', loc),
+                callback_data: 'settings_ai_custom_manage'
+            }]);
+        }
+        keyboard.push([{
+            text: autoEnrich ? '🔕 ' + (loc === 'en' ? 'Disable auto-enrich' : 'Выключить автоанализ') : '🔔 ' + (loc === 'en' ? 'Enable auto-enrich' : 'Включить автоанализ'),
+            callback_data: 'settings_ai_toggle_enrich'
+        }]);
 
         if (activeProvider && configuredIds.includes(activeProvider)) {
             keyboard.push([{
@@ -550,14 +581,17 @@ class MenuService {
         return { reply_markup: { inline_keyboard: keyboard } };
     }
 
-    static getSettingsAddProviderMenu() {
+    static async getSettingsAddProviderMenu(locale = null) {
         const AiProviderRegistry = require('../ai/AiProviderRegistry');
+        const loc = locale || await this._loc();
         const keyboard = AiProviderRegistry.listAll().map((p) => {
-            return [{ text: AiProviderRegistry.getLabel(p.id, { withTier: false }), callback_data: `settings_ai_add_${p.id}` }];
+            const suffix = p.isCustom ? ' ⚙️' : '';
+            return [{ text: AiProviderRegistry.getLabel(p.id, { withTier: false }) + suffix, callback_data: `settings_ai_add_${p.id}` }];
         });
         keyboard.push(
-            [{ text: '↩️ Назад', callback_data: 'settings_ai' }],
-            [{ text: '↩️ Главное меню', callback_data: 'cancel' }]
+            [{ text: '⚙️ ' + this._t('settings.ai.custom_api', loc), callback_data: 'settings_ai_custom_start' }],
+            [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai' }],
+            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -574,11 +608,18 @@ class MenuService {
         return { reply_markup: { inline_keyboard: keyboard } };
     }
 
-    static getSettingsGeneralMenu(currentTz, chatCleanup) {
+    static async getSettingsGeneralMenu(currentTz, chatCleanup, locale = null) {
+        const loc = locale || await this._loc();
         const presets = ['Europe/Moscow', 'UTC', 'Europe/Kiev', 'Asia/Almaty'];
         const keyboard = [
             [{
-                text: chatCleanup ? '🧹 Выключить очистку чата' : '🧹 Включить очистку чата',
+                text: (loc === 'en' ? 'Language: ' : 'Язык: ') + (loc === 'en' ? 'EN' : 'RU'),
+                callback_data: 'settings_language'
+            }],
+            [{
+                text: chatCleanup
+                    ? '🧹 ' + (loc === 'en' ? 'Disable chat cleanup' : 'Выключить очистку чата')
+                    : '🧹 ' + (loc === 'en' ? 'Enable chat cleanup' : 'Включить очистку чата'),
                 callback_data: 'settings_toggle_cleanup'
             }]
         ];
@@ -587,11 +628,26 @@ class MenuService {
             keyboard.push([{ text: `${mark}${tz}`, callback_data: `settings_tz_${tz}` }]);
         });
         keyboard.push(
-            [{ text: '✏️ Ввести часовой пояс вручную', callback_data: 'settings_tz_manual' }],
-            [{ text: '↩️ Назад', callback_data: 'settings_back_root' }],
-            [{ text: '↩️ Главное меню', callback_data: 'cancel' }]
+            [{ text: '✏️ ' + (loc === 'en' ? 'Enter timezone manually' : 'Ввести часовой пояс вручную'), callback_data: 'settings_tz_manual' }],
+            [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_back_root' }],
+            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
+    }
+
+    static async getSettingsLanguageMenu(currentLocale, locale = null) {
+        const loc = locale || currentLocale || await this._loc();
+        const sel = (on) => (on ? '✓ ' : '');
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: `${sel(currentLocale === 'ru')}${this._t('settings.lang.ru', loc)}`, callback_data: 'settings_lang_ru' }],
+                    [{ text: `${sel(currentLocale === 'en')}${this._t('settings.lang.en', loc)}`, callback_data: 'settings_lang_en' }],
+                    [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_general' }],
+                    [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+                ]
+            }
+        };
     }
 
     static getSettingsHelpMenu() {
@@ -600,6 +656,135 @@ class MenuService {
                 inline_keyboard: [
                     [{ text: '↩️ Назад', callback_data: 'settings_back_root' }],
                     [{ text: '↩️ Главное меню', callback_data: 'cancel' }]
+                ]
+            }
+        };
+    }
+
+    static async getAdminHubMenu(ui = null, locale = null) {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const loc = locale || await this._loc();
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: UiStyleService.optionalEmoji(style, '🔐', this._t('admin.section.access', loc)), callback_data: 'admin_access' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '☁️', this._t('admin.section.cloud', loc)), callback_data: 'admin_cloud' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '📊', this._t('admin.section.system', loc)), callback_data: 'admin_system' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '🛠', this._t('admin.section.maintenance', loc)), callback_data: 'admin_maintenance' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '🚪', this._t('admin.logout', loc)), callback_data: 'admin_logout' }],
+                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                ]
+            }
+        };
+    }
+
+    static async getAdminAccessMenu(ui = null, locale = null) {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const loc = locale || await this._loc();
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: UiStyleService.optionalEmoji(style, '🔑', this._t('admin.access.set_password', loc)), callback_data: 'admin_access_set_password' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '➕', this._t('admin.access.invite_24', loc)), callback_data: 'admin_access_invite_24' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '➕', this._t('admin.access.invite_168', loc)), callback_data: 'admin_access_invite_168' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '✏️', this._t('admin.access.invite_custom', loc)), callback_data: 'admin_access_invite_custom' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '📋', this._t('admin.access.sessions', loc)), callback_data: 'admin_access_sessions' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '📜', this._t('admin.access.audit', loc)), callback_data: 'admin_access_audit' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '👤', this._t('admin.access.guest_drafts_edit', loc)), callback_data: 'admin_access_guest_drafts_toggle' }],
+                    [{ text: UiStyleService.backLabel(style, this._t('admin.back.hub', loc)), callback_data: 'admin_hub' }],
+                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                ]
+            }
+        };
+    }
+
+    static async getAdminCloudMenu(mode, ui = null, locale = null) {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const loc = locale || await this._loc();
+        const sel = (on) => (on ? UiStyleService.selectedMark(style) : '');
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: `${sel(mode === 'file')}${this._t('admin.cloud.mode.file', loc)}`, callback_data: 'admin_cloud_mode_file' }],
+                    [{ text: `${sel(mode === 'supabase')}${this._t('admin.cloud.mode.supabase', loc)}`, callback_data: 'admin_cloud_mode_supabase' }],
+                    [{ text: `${sel(mode === 'dual')}${this._t('admin.cloud.mode.dual', loc)}`, callback_data: 'admin_cloud_mode_dual' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '🔗', this._t('admin.cloud.test', loc)), callback_data: 'admin_cloud_test' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '⬆️', this._t('admin.cloud.migrate', loc)), callback_data: 'admin_cloud_migrate' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '⬆️', this._t('admin.cloud.push', loc)), callback_data: 'admin_cloud_push' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '⬇️', this._t('admin.cloud.pull', loc)), callback_data: 'admin_cloud_pull' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '📥', this._t('admin.cloud.export', loc)), callback_data: 'admin_cloud_export' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '🔑', this._t('admin.cloud.url', loc)), callback_data: 'admin_cloud_url' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '🔑', this._t('admin.cloud.key', loc)), callback_data: 'admin_cloud_key' }],
+                    [{ text: UiStyleService.backLabel(style, this._t('admin.back.hub', loc)), callback_data: 'admin_hub' }],
+                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                ]
+            }
+        };
+    }
+
+    static async getAdminMaintenanceMenu(ui = null, locale = null) {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const loc = locale || await this._loc();
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: UiStyleService.optionalEmoji(style, '🔄', this._t('admin.maintenance.reconcile', loc)), callback_data: 'admin_maintenance_reconcile' }],
+                    [{ text: UiStyleService.optionalEmoji(style, '📥', this._t('admin.maintenance.backup', loc)), callback_data: 'admin_cloud_export' }],
+                    [{ text: UiStyleService.backLabel(style, this._t('admin.back.hub', loc)), callback_data: 'admin_hub' }],
+                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                ]
+            }
+        };
+    }
+
+    static async getAdminSessionsMenu(sessions, ui = null, locale = null) {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const loc = locale || await this._loc();
+        const keyboard = sessions.slice(0, 15).map((s, i) => [{
+            text: `#${i + 1} ${s.role} · ${s.telegramUserId}`,
+            callback_data: `admin_access_revoke_${s.id}`
+        }]);
+        keyboard.push(
+            [{ text: UiStyleService.backLabel(style, this._t('common.back', loc)), callback_data: 'admin_access' }],
+            [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+        );
+        return { reply_markup: { inline_keyboard: keyboard } };
+    }
+
+    static async getSettingsCustomAiManageMenu(locale = null) {
+        const SettingsService = require('./SettingsService');
+        const loc = locale || await this._loc();
+        const providers = await SettingsService.getCustomProviders();
+        const keyboard = providers.map((p) => [{
+            text: p.label,
+            callback_data: `settings_ai_custom_edit_${p.id}`
+        }]);
+        keyboard.push(
+            [{ text: '➕ ' + this._t('settings.ai.custom_api', loc), callback_data: 'settings_ai_custom_start' }],
+            [{ text: this._t('common.back', loc), callback_data: 'settings_ai' }],
+            [{ text: this._t('common.main_menu', loc), callback_data: 'cancel' }]
+        );
+        return { reply_markup: { inline_keyboard: keyboard } };
+    }
+
+    static async getSettingsCustomAiEditMenu(providerId, locale = null) {
+        const UiStyleService = require('./UiStyleService');
+        const loc = locale || await this._loc();
+        const style = { useEmojis: true, navStyle: 'text' };
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '✏️ ' + (loc === 'en' ? 'Name' : 'Название'), callback_data: `settings_ai_edit_${providerId}_label` }],
+                    [{ text: '🔗 URL', callback_data: `settings_ai_edit_${providerId}_url` }],
+                    [{ text: '🔑 ' + (loc === 'en' ? 'API key' : 'Ключ API'), callback_data: `settings_ai_edit_${providerId}_key` }],
+                    [{ text: '🧠 ' + (loc === 'en' ? 'Model' : 'Модель'), callback_data: `settings_ai_edit_${providerId}_model` }],
+                    [{ text: UiStyleService.backLabel(style, this._t('settings.ai.custom.edit', loc)), callback_data: 'settings_ai_custom_manage' }],
+                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
                 ]
             }
         };

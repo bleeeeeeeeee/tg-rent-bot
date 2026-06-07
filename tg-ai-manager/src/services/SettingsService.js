@@ -1,13 +1,11 @@
-const fs = require('fs').promises;
-const path = require('path');
+const JsonStore = require('../storage/JsonStore');
 const { TIMEZONE } = require('../config');
-
-const FILE_PATH = path.join(__dirname, '../../storage/settings.json');
 
 const DEFAULT_SETTINGS = {
   ai: {
     activeProvider: null,
     autoEnrich: true,
+    customProviders: [],
     models: {
       openai: 'gpt-4o-mini',
       gemini: 'gemini-2.0-flash',
@@ -20,11 +18,25 @@ const DEFAULT_SETTINGS = {
   },
   general: {
     timezone: TIMEZONE || 'Europe/Moscow',
-    chatCleanup: true
+    chatCleanup: true,
+    locale: 'ru'
   },
   ui: {
     useEmojis: true,
     navStyle: 'text'
+  },
+  cloud: {
+    mode: 'file',
+    supabaseUrl: '',
+    instanceLabel: '',
+    lastSyncAt: null,
+    lastSyncError: null
+  },
+  access: {
+    masterPasswordSet: false,
+    guest: {
+      draftsEdit: false
+    }
   }
 };
 
@@ -48,18 +60,16 @@ function deepMerge(defaults, overrides) {
 class SettingsService {
   static async _read() {
     try {
-      const raw = await fs.readFile(FILE_PATH, 'utf8');
-      return deepMerge(DEFAULT_SETTINGS, JSON.parse(raw));
+      const raw = await JsonStore.read('settings', {});
+      return deepMerge(DEFAULT_SETTINGS, raw);
     } catch (err) {
-      if (err.code !== 'ENOENT') {
-        console.error('[SettingsService] Read error:', err.message);
-      }
+      console.error('[SettingsService] Read error:', err.message);
       return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
     }
   }
 
   static async _write(data) {
-    await fs.writeFile(FILE_PATH, JSON.stringify(data, null, 2), 'utf8');
+    await JsonStore.write('settings', data);
   }
 
   static async getAll() {
@@ -162,6 +172,127 @@ class SettingsService {
     s.ai.models[providerId] = model;
     await this._write(s);
     return model;
+  }
+
+  static async getCloud() {
+    const s = await this._read();
+    return {
+      mode: s.cloud?.mode || 'file',
+      supabaseUrl: s.cloud?.supabaseUrl || '',
+      instanceLabel: s.cloud?.instanceLabel || '',
+      lastSyncAt: s.cloud?.lastSyncAt || null,
+      lastSyncError: s.cloud?.lastSyncError || null
+    };
+  }
+
+  static async setCloud(patch) {
+    const s = await this._read();
+    s.cloud = { ...(s.cloud || {}), ...patch };
+    await this._write(s);
+    return this.getCloud();
+  }
+
+  static async getLocale() {
+    const s = await this._read();
+    return s.general?.locale === 'en' ? 'en' : 'ru';
+  }
+
+  static async setLocale(locale) {
+    const s = await this._read();
+    s.general = s.general || {};
+    s.general.locale = locale === 'en' ? 'en' : 'ru';
+    await this._write(s);
+    return s.general.locale;
+  }
+
+  static async getCustomProviders() {
+    const s = await this._read();
+    return Array.isArray(s.ai?.customProviders) ? s.ai.customProviders : [];
+  }
+
+  static slugifyLabel(label) {
+    const base = String(label || 'api')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '')
+      .slice(0, 32) || 'api';
+    return `custom_${base}`;
+  }
+
+  static async addCustomProvider({ label, baseUrl, defaultModel, requiresKey = true }) {
+    const s = await this._read();
+    s.ai = s.ai || {};
+    s.ai.customProviders = s.ai.customProviders || [];
+    let id = this.slugifyLabel(label);
+    const existing = new Set(s.ai.customProviders.map((p) => p.id));
+    let n = 1;
+    while (existing.has(id)) {
+      id = `${this.slugifyLabel(label)}_${n++}`;
+    }
+    const row = {
+      id,
+      label: String(label).trim(),
+      baseUrl: String(baseUrl).trim(),
+      defaultModel: String(defaultModel).trim(),
+      requiresKey: requiresKey !== false,
+      createdAt: new Date().toISOString()
+    };
+    s.ai.customProviders.push(row);
+    s.ai.models = s.ai.models || {};
+    s.ai.models[id] = row.defaultModel;
+    await this._write(s);
+    return row;
+  }
+
+  static async removeCustomProvider(providerId) {
+    const s = await this._read();
+    s.ai.customProviders = (s.ai.customProviders || []).filter((p) => p.id !== providerId);
+    if (s.ai.models?.[providerId]) delete s.ai.models[providerId];
+    if (s.ai.activeProvider === providerId) s.ai.activeProvider = null;
+    await this._write(s);
+  }
+
+  static async getCustomProvider(providerId) {
+    return (await this.getCustomProviders()).find((p) => p.id === providerId) || null;
+  }
+
+  static async updateCustomProvider(providerId, patch) {
+    const s = await this._read();
+    const list = s.ai?.customProviders || [];
+    const idx = list.findIndex((p) => p.id === providerId);
+    if (idx < 0) throw new Error('Custom provider not found');
+    list[idx] = {
+      ...list[idx],
+      ...patch,
+      id: providerId,
+      updatedAt: new Date().toISOString()
+    };
+    s.ai.customProviders = list;
+    if (patch.defaultModel) {
+      s.ai.models = s.ai.models || {};
+      s.ai.models[providerId] = patch.defaultModel;
+    }
+    await this._write(s);
+    return list[idx];
+  }
+
+  static async getGuestPermissions() {
+    const s = await this._read();
+    return {
+      draftsEdit: s.access?.guest?.draftsEdit === true
+    };
+  }
+
+  static async setGuestPermissions(patch) {
+    const s = await this._read();
+    s.access = s.access || {};
+    s.access.guest = { ...(s.access.guest || {}), ...patch };
+    await this._write(s);
+    return this.getGuestPermissions();
+  }
+
+  static invalidateCache() {
+    /* hook for Realtime; settings read fresh each time */
   }
 }
 

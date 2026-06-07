@@ -1,25 +1,19 @@
-const fs = require('fs').promises;
-const path = require('path');
+const JsonStore = require('../storage/JsonStore');
 const { OPENAI_API_KEY } = require('../config');
-
-const FILE_PATH = path.join(__dirname, '../../storage/secrets.json');
 
 class SecretsService {
   static async _read() {
     try {
-      const raw = await fs.readFile(FILE_PATH, 'utf8');
-      const parsed = JSON.parse(raw);
+      const parsed = await JsonStore.read('secrets', { providers: {} });
       return parsed?.providers ? parsed : { providers: {} };
     } catch (err) {
-      if (err.code !== 'ENOENT') {
-        console.error('[SecretsService] Read error:', err.message);
-      }
+      console.error('[SecretsService] Read error:', err.message);
       return { providers: {} };
     }
   }
 
   static async _write(data) {
-    await fs.writeFile(FILE_PATH, JSON.stringify(data, null, 2), 'utf8');
+    await JsonStore.write('secrets', data);
   }
 
   static maskSecret(value) {
@@ -38,6 +32,24 @@ class SecretsService {
     data.providers[providerId] = { ...(data.providers[providerId] || {}), ...fields };
     await this._write(data);
     return data.providers[providerId];
+  }
+
+  static async getSupabaseConfig() {
+    const data = await this._read();
+    return data.supabase || null;
+  }
+
+  static async setSupabaseConfig(fields) {
+    const data = await this._read();
+    data.supabase = { ...(data.supabase || {}), ...fields };
+    await this._write(data);
+    return data.supabase;
+  }
+
+  static async removeSupabaseConfig() {
+    const data = await this._read();
+    delete data.supabase;
+    await this._write(data);
   }
 
   static async removeProviderSecret(providerId) {

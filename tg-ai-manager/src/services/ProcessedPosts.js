@@ -1,14 +1,11 @@
-const fs = require('fs').promises;
-const path = require('path');
+const JsonStore = require('../storage/JsonStore');
 
-const FILE_PATH = path.join(__dirname, '../../storage/processed_posts.json');
 const AI_VERSION = 1;
 
 class ProcessedPosts {
   static async _read() {
     try {
-      const data = await fs.readFile(FILE_PATH, 'utf8');
-      const parsed = JSON.parse(data);
+      const parsed = await JsonStore.read('processed_posts', { entries: [] });
       if (parsed?.entries) return parsed;
       if (parsed?.ids) {
         return {
@@ -22,7 +19,7 @@ class ProcessedPosts {
   }
 
   static async _write(data) {
-    await fs.writeFile(FILE_PATH, JSON.stringify(data, null, 2), 'utf8');
+    await JsonStore.write('processed_posts', data);
   }
 
   static async getEntry(messageId) {

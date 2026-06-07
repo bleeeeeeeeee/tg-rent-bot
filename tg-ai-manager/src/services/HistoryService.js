@@ -4,15 +4,9 @@ const PostGraphService = require('./PostGraphService');
 const { shouldHideFromList, getAlbumParts, countAlbumMedia, isEmptyPost } = require('../utils/albumPosts');
 const { buildPostUrl } = require('../utils/channelUrl');
 const SettingsService = require('./SettingsService');
+const { t } = require('../i18n');
 
 const PAGE_SIZE = 8;
-
-const FILTER_LABELS = {
-  published: 'Вышедшие',
-  scheduled: 'В очереди',
-  deleted: 'Удалённые',
-  all: 'Все посты'
-};
 
 const LIFECYCLE_LABELS = {
   active: '',
@@ -21,10 +15,16 @@ const LIFECYCLE_LABELS = {
 };
 
 class HistoryService {
-  static truncatePreview(text, max = 120) {
-    if (!text?.trim()) return 'Без текста';
-    const t = text.replace(/\s+/g, ' ').trim();
-    return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+  static async getFilterLabel(filter, locale = null) {
+    const loc = locale || (await SettingsService.getLocale());
+    const key = `history.filter.${filter}`;
+    return t(key, null, loc);
+  }
+
+  static truncatePreview(text, max = 120, locale = 'ru') {
+    if (!text?.trim()) return t('history.no_text', null, locale);
+    const trimmed = text.replace(/\s+/g, ' ').trim();
+    return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max - 1)}…`;
   }
 
   static getDisplayPreview(post) {
@@ -33,14 +33,16 @@ class HistoryService {
     return post.post || post.preview || '';
   }
 
-  static formatDate(iso, timezone) {
+  static formatDate(iso, timezone, locale = 'ru') {
     if (!iso) return '—';
-    return new Date(iso).toLocaleString('ru-RU', { timeZone: timezone });
+    const locTag = locale === 'en' ? 'en-US' : 'ru-RU';
+    return new Date(iso).toLocaleString(locTag, { timeZone: timezone });
   }
 
-  static formatShortDate(iso, timezone) {
+  static formatShortDate(iso, timezone, locale = 'ru') {
     if (!iso) return '—';
-    return new Date(iso).toLocaleString('ru-RU', {
+    const locTag = locale === 'en' ? 'en-US' : 'ru-RU';
+    return new Date(iso).toLocaleString(locTag, {
       timeZone: timezone,
       day: '2-digit',
       month: '2-digit',
@@ -181,13 +183,15 @@ class HistoryService {
     const safePage = Math.min(Math.max(0, page), pages - 1);
     const slice = items.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
+    const locale = await SettingsService.getLocale();
     return {
       items: slice,
       total,
       pages,
       page: safePage,
       filter,
-      filterLabel: FILTER_LABELS[filter] || filter
+      filterLabel: await this.getFilterLabel(filter, locale),
+      locale
     };
   }
 
@@ -247,14 +251,15 @@ class HistoryService {
   }
 
   static formatListHeader(result) {
-    const { filterLabel, total, page, pages } = result;
+    const { filterLabel, total, page, pages, locale = 'ru' } = result;
+    const title = t('history.list.title', null, locale);
     if (total === 0) {
-      return `📚 <b>История постов</b>\n\nРежим: ${filterLabel}\nПостов нет.`;
+      return `📚 <b>${title}</b>\n\n${t('history.list.mode', { filter: filterLabel }, locale)}\n${t('history.list.empty', null, locale)}`;
     }
     return (
-      `📚 <b>История постов</b>\n\n` +
-      `Режим: ${filterLabel}\n` +
-      `Всего: ${total} · стр. ${page + 1}/${pages}`
+      `📚 <b>${title}</b>\n\n` +
+      `${t('history.list.mode', { filter: filterLabel }, locale)}\n` +
+      t('history.list.page', { total, page: page + 1, pages }, locale)
     );
   }
 

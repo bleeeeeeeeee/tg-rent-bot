@@ -5,17 +5,30 @@ const ollama = require('./providers/ollama');
 const openrouter = require('./providers/openrouter');
 const deepseek = require('./providers/deepseek');
 const mistral = require('./providers/mistral');
+const { buildCustomProvider } = require('./providers/customOpenAI');
 
-const PROVIDERS = [gemini, groq, ollama, openrouter, deepseek, openai, mistral];
-const BY_ID = Object.fromEntries(PROVIDERS.map((p) => [p.id, p]));
+const BUILTIN = [gemini, groq, ollama, openrouter, deepseek, openai, mistral];
+const BUILTIN_BY_ID = Object.fromEntries(BUILTIN.map((p) => [p.id, p]));
 
 class AiProviderRegistry {
+  static _custom = [];
+
+  static async refreshCustom() {
+    const SettingsService = require('../services/SettingsService');
+    const configs = await SettingsService.getCustomProviders();
+    this._custom = configs.map((c) => buildCustomProvider(c));
+  }
+
   static listAll() {
-    return PROVIDERS;
+    return [...BUILTIN, ...this._custom];
+  }
+
+  static listBuiltin() {
+    return BUILTIN;
   }
 
   static get(id) {
-    return BY_ID[id] || null;
+    return BUILTIN_BY_ID[id] || this._custom.find((p) => p.id === id) || null;
   }
 
   static getLabel(id, options = {}) {
@@ -30,6 +43,10 @@ class AiProviderRegistry {
     const provider = this.get(id);
     if (!provider || !secrets) return false;
     return provider.isConfigured(secrets);
+  }
+
+  static isCustom(id) {
+    return String(id || '').startsWith('custom_');
   }
 
   static async summarize(providerId, text, { model, secrets }) {

@@ -1,10 +1,13 @@
 const BotService = require('./services/BotService');
 const PostRepository = require('./services/PostRepository');
 const SchedulerService = require('./services/SchedulerService');
-const { CHANNEL_ID, ADMIN_ID, BOT_TOKEN } = require('./config');
+const AccessService = require('./services/AccessService');
+const SyncService = require('./services/SyncService');
+const { CHANNEL_ID, ADMIN_ID, OWNER_TELEGRAM_ID, BOT_TOKEN, STORAGE_BACKEND } = require('./config');
 const ExistingPosts = require('./services/ExistingPosts');
 const SecretsService = require('./services/SecretsService');
 const SettingsService = require('./services/SettingsService');
+const AiProviderRegistry = require('./ai/AiProviderRegistry');
 
 process.on('uncaughtException', (err) => console.error('uncaughtException', err));
 process.on('unhandledRejection', (err) => console.error('unhandledRejection', err));
@@ -14,11 +17,15 @@ process.on('unhandledRejection', (err) => console.error('unhandledRejection', er
     console.log('\n🤖 === TELEGRAM BOT STARTED ===\n');
     console.log('⚙️  Configuration:');
     console.log(`   BOT_TOKEN: ${BOT_TOKEN ? '✅ set' : '❌ not set'}`);
-    console.log(`   ADMIN_ID: ${ADMIN_ID}`);
+    console.log(`   OWNER_TELEGRAM_ID: ${OWNER_TELEGRAM_ID || ADMIN_ID}`);
     console.log(`   CHANNEL_ID: ${CHANNEL_ID}`);
+    console.log(`   STORAGE_BACKEND: ${STORAGE_BACKEND}`);
 
     await ExistingPosts.migrateSchema();
     await SecretsService.seedFromEnv();
+    await AccessService.init();
+    await AiProviderRegistry.refreshCustom();
+    await SyncService.init();
 
     const settings = await SettingsService.getAll();
     const activeAi = await SettingsService.getActiveProvider();

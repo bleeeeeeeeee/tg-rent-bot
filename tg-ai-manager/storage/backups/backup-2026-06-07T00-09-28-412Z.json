@@ -1,0 +1,1208 @@
+{
+  "settings": {
+    "ai": {
+      "activeProvider": "ollama",
+      "autoEnrich": true,
+      "models": {
+        "openai": "gpt-4o",
+        "gemini": "gemini-2.0-flash",
+        "groq": "llama-3.3-70b-versatile",
+        "openrouter": "meta-llama/llama-3.2-3b-instruct:free",
+        "ollama": "llama3.2",
+        "deepseek": "deepseek-chat",
+        "mistral": "mistral-small-latest"
+      }
+    },
+    "general": {
+      "timezone": "Europe/Moscow",
+      "chatCleanup": true
+    },
+    "ui": {
+      "useEmojis": false,
+      "navStyle": "text"
+    }
+  },
+  "secrets": {
+    "providers": {
+      "openai": {
+        "apiKey": "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"
+      },
+      "ollama": {
+        "baseUrl": "http://127.0.0.1:11434"
+      }
+    }
+  },
+  "existing_posts": {
+    "schemaVersion": 3,
+    "posts": [
+      {
+        "id": 1,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": null,
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "deleted",
+        "editedAt": null,
+        "deletedAt": "2026-06-05T23:35:20.480Z",
+        "added": "2025-02-10T15:05:42.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 4,
+        "post": "Приветствуем в Void:Preshade.\n          \n         \nЗдесь мы исследуем границы искусства, где пустота и свет существуют одновременно.\nКаждое произведение — это пространство, наполненное смыслом и тенью, которые мы способны увидеть.\n\n✦ Забытые истории.\nНе все моменты искусства были замечены, но они всё ещё существуют в памяти форм и линий.\n\n✦ Потерянные смыслы.\nНередко искусство уходит в тень, но его послания остаются с нами.\n\n✦ Найденные образы.\nВ каждом произведении скрыты ответы на вопросы, которые мы ещё не задали.\n\nОбратная сторона искусства — это то, что скрыто от глаз.\nНе только на холстах, но и в нашем восприятии.\nМы ищем те пространства, которые не видны с первого взгляда, те формы, что остаются вне рамок привычного.\n\nЗдесь нет границ для поиска. Мы не обещаем лёгких ответов, но каждый шаг будет наполнен глубиной.\n\n🔗 Подписывайся и будь частью этого пути.",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "edited",
+        "editedAt": "2025-02-11T00:11:16.000Z",
+        "deletedAt": null,
+        "added": "2025-02-10T21:57:47.000Z",
+        "aiVersion": 1,
+        "contentHash": "1d111896d7365f1a"
+      },
+      {
+        "id": 6,
+        "post": "Пустота как искусство\n\n\nЧто, если искусство — это не только линии и цвета, но и их отсутствие?\nПустота не означает нехватку. Это пространство, где смысл рождается сам по себе.\n\nПустота — это форма, а форма — это пустота.\n\n© Сутра Сердца\n\n◦ Чёрный квадрат, Казимир Малевич\nНе изображение, а идея. Предел форм, сведённых к чистой мысли.\n\n◦ International Klein Blue, Ив Кляйн\nЦвет как бесконечность. Пустота, в которой растворяется взгляд.\n\n◦ Световые пространства, Джеймс Таррелл\nМатериальность пустоты. Свет как форма, которой нельзя коснуться.\n\nПустота делает видимое осмысленным.\nЧто ты видишь в ней?\n\n#meaning\n👣 Void:Preshade",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "edited",
+        "editedAt": "2025-02-11T22:20:55.000Z",
+        "deletedAt": null,
+        "added": "2025-02-10T22:31:35.000Z",
+        "aiVersion": 1,
+        "contentHash": "434161d2271bbd66"
+      },
+      {
+        "id": 7,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 6,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-10T22:31:35.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 8,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 6,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-10T22:31:36.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 16,
+        "post": "Архитектура: Искусство, воплощенное в пространствах.\n\nАрхитектура — это не просто строительство. Это создание целых миров, где каждый угол, каждая линия и форма наполнены смыслом. Здание может быть не только функциональным, но и эмоциональным объектом, отражающим культуру и эпоху, в которой оно было создано. Каждый проект — это история, рассказанная через материалы и пространство.\n\nАрхитектура — это искусство и наука создания пространства, в котором живут люди.\n\n© Лев Каминский\n\nКак часто мы воспринимаем архитектуру только как оболочку, забывая о том, что за каждым зданием стоит идея, философия и художественное видение?\n\n#architecture\n👣 Void:Preshade",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "edited",
+        "editedAt": "2025-02-11T22:55:36.000Z",
+        "deletedAt": null,
+        "added": "2025-02-11T22:34:38.000Z",
+        "aiVersion": 1,
+        "contentHash": "19529d18986294bd"
+      },
+      {
+        "id": 17,
+        "post": "Carol Christian Poell \"MAINSTREAM — DOWNSTREAM\" (A/W 2004)\n\nПоказ Carol Christian Poell на воде в 2004 году стал не просто модным событием, а заявлением против индустрии. Вместо привычного подиума — канал в Милане, вместо громкой рекламы — молчаливый перформанс. Модели в пропитанных водой образах медленно двигались по поверхности, будто погружаясь в неизбежность.  \n\nОднако модная индустрия восприняла это неоднозначно. Некоторые критики назвали шоу нелепым, заявляя, что оно вышло за границы понятного. Ритейлеры отказывались работать с Poell, так как его вещи не вписывались в стандарты массового рынка. Сам дизайнер не участвовал в коммерческих показах, не давал интервью и отказывался от сотрудничества с традиционными модными домами.  \n\nВода в этом шоу была не просто средой, а смысловым элементом. Она символизировала движение, разрушение и время — три силы, которые неизбежно воздействуют на одежду и человека. Poell всегда исследовал тему тления: его вещи будто переживали процесс распада ещё до того, как попадали к владельцу.  \n\nЭтот показ стал метафорой сопротивления — движением против течения индустрии, которая стремится к вечной новизне и потреблению. Poell же говорил языком антимоды: его работы не подстраивались под тренды, а существовали вне времени.\n\n#exhibitions #fashion\n👣 Void:Preshade",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": null,
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "edited",
+        "editedAt": "2025-02-12T23:10:02.000Z",
+        "deletedAt": null,
+        "added": "2025-02-12T23:09:53.000Z",
+        "aiVersion": 1,
+        "contentHash": "cb879f152435ff25"
+      },
+      {
+        "id": 19,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "video",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 17,
+        "replyTo": 17,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-12T23:11:22.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 20,
+        "post": "Runaway — Kanye West, Pusha T\n\n«Runaway» — это признание и исповедь. Девять минут тоски, гордыни и сожаления. С первых ударов пианино — пустота, одиночество, осознание: «Я дерьмо, беги от меня подальше».  \n\nKanye погружается в тему разрушительных отношений, а холодный голос Pusha T дополняет картину безразличия. Финальная часть — искажённый крик, когда слова уже не имеют значения.  \n\nВпервые трек прозвучал на MTV VMA 2010, став кульминацией перформанса. Он вдохновлён «Expo 2000» Kraftwerk, а финальный вокал намеренно искажён, создавая эффект потери связи с реальностью.  \n\n«Runaway» — это красота ошибок, превращённых в искусство.  \n\n#sounds\n👣 Void:Preshade",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "document",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "edited",
+        "editedAt": "2025-02-13T20:56:45.000Z",
+        "deletedAt": null,
+        "added": "2025-02-13T20:48:35.000Z",
+        "aiVersion": 1,
+        "contentHash": "90aa7c3bd0ebbd29"
+      },
+      {
+        "id": 21,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "video",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": 20,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-13T21:02:07.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 22,
+        "post": "История любви, которую можно почувствовать  \n\nЭтот пост к 14 февраля — дню, когда говорят о любви. Но настоящая любовь живёт не в словах, а в поступках.  \n\nВ японской префектуре Миядзаки живёт Тошиюки Курада. Когда его жена потеряла зрение, он заметил, что её всё больше поглощает грусть. Тогда он высадил вокруг дома тысячи роз, чтобы она могла чувствовать их аромат и снова улыбаться.  \n\n🌸 Теперь каждое утро ветер приносит запах цветов, наполняя их дом тёплым напоминанием: любовь — это не то, что можно увидеть, а то, что можно почувствовать.  \n\n#exhibitions \n👣 Void:Preshade",
+        "postOriginal": null,
+        "title": "Настоящая любовь",
+        "mainIdea": "История Тoshiyuki Kurada о том, как он заметил, что его жена теряет зрение и как он высадил вокруг дома тысячи роз, чтобы она могла чувствовать их аромат",
+        "tags": [
+          "love",
+          "rose",
+          "япония",
+          "любовь"
+        ],
+        "category": "мнение",
+        "keywords": [
+          "любовь",
+          "розы",
+          "япония",
+          "любовные истории",
+          "посты о любви"
+        ],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "edited",
+        "editedAt": "2025-02-14T13:23:28.000Z",
+        "deletedAt": null,
+        "added": "2025-02-14T13:23:12.000Z",
+        "aiVersion": 1,
+        "contentHash": "1b0f3ddb94736f7d"
+      },
+      {
+        "id": 23,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 22,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-14T13:23:12.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 24,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 22,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-14T13:23:12.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 25,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "video",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 22,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-14T13:23:12.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 27,
+        "post": "Дом-наутилус в Мексике — архитектура, созданная природой  \n\nВ 2007 году архитектор Хавьер Сеносиан построил Casa Nautilus – дом, вдохновленный раковиной моллюска. Форма, линии, даже свет внутри — всё напоминает о подводном мире. Здесь нет привычных углов, только плавные изгибы, стеклянные мозаики и естественные оттенки.  \n\nСеносиан следовал принципу биоархитектуры, создавая пространство, которое будто сливается с природой. Дом защищает от жары, пропускает мягкий рассеянный свет и создаёт эффект уюта, напоминающий пещеру.  \n\nВ мире, где архитектура часто жестка и прямолинейна, Casa Nautilus доказывает: формы природы могут быть не только вдохновением, но и основой для жизни.  \n\n#architecture\n👣 Void:Preshade",
+        "postOriginal": null,
+        "title": "Дом-наутилус в Мексике",
+        "mainIdea": "Архитектура Casa Nautilus, созданная природой, вдохновлена раковиной моллюска.",
+        "tags": [
+          "#architecture",
+          "#домнаутилус",
+          "#мексика"
+        ],
+        "category": "новость",
+        "keywords": [
+          "#biarchitectura",
+          "#проекты",
+          "#архитектура",
+          "#домнаутилус",
+          "#мексика",
+          "#природнаяархитектура"
+        ],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "edited",
+        "editedAt": "2025-02-17T15:18:01.000Z",
+        "deletedAt": null,
+        "added": "2025-02-17T15:16:32.000Z",
+        "aiVersion": 1,
+        "contentHash": "26c67bad93f2ec8e"
+      },
+      {
+        "id": 28,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 27,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:16:32.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 29,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 27,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:16:32.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 30,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 27,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:16:32.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 31,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 27,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:16:32.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 32,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 27,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:16:32.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 33,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 27,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:16:33.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 34,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 27,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:16:33.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 35,
+        "post": "Тадао Андо — поэт бетона и мастер тишины  \n\nТадао Андо — самоук, который превратил бетон в искусство. Без архитектурного образования, он изучал ремесло, путешествуя по миру, а затем создал стиль, где свет и тень становятся такими же важными, как стены.  \n\nЕго здания — это медитация, диалог пустоты и пространства. Церковь Света в Японии — бетонный куб, в котором единственным источником света служит крестообразный проём. Остров Наосима — музей под открытым небом, где природа и архитектура сплетены в единое целое.  \n\nАрхитектура должна говорить с душой.\n\n© Тадао Андо\n\nЕго минимализм — это не про отказ, а про смысл. Каждая его постройка напоминает: тишина тоже может быть красотой.  \n\n#architecture #artists\n👣 Void:Preshade",
+        "postOriginal": null,
+        "title": "Тадао Андо - поэт бетона и мастер тишины",
+        "mainIdea": "Самоук Тадао Андо превратил бетон в искусство, создав стиль, где свет и тень становятся такими же важными, как стены.",
+        "tags": [
+          "архитектура",
+          "искусство",
+          "тишина",
+          "бетон",
+          "медитация"
+        ],
+        "category": "новость",
+        "keywords": [
+          "Тадао Андо",
+          "бетонное искусство",
+          "тишина в архитектуре",
+          "минимализм",
+          "архитектурный дизайн"
+        ],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "edited",
+        "editedAt": "2025-02-17T15:31:49.000Z",
+        "deletedAt": null,
+        "added": "2025-02-17T15:27:36.000Z",
+        "aiVersion": 1,
+        "contentHash": "5da781dab5735c78"
+      },
+      {
+        "id": 36,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 35,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:27:36.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 37,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 35,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:27:36.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 38,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 35,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:27:36.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 39,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 35,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-17T15:27:36.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 40,
+        "post": "Фрэнсис Бэкон — самый пугающий художник прошлого века\n\nФрэнсис Бэкон писал картины, которые невозможно просто рассматривать — их приходится переживать. Размытые лица, искорёженные фигуры, затаённый крик. Он не стремился к красоте, но находил выразительность в страхе, одиночестве и боли.  \n\nЕго работы — это столкновение с самой природой человеческого существования. Он вдохновлялся медицинскими атласами, фильмами, фотографиями — всем, что фиксирует искажение и движение. Его «Кричащие папы», навеянные портретом Иннокентия X Веласкеса, превращают фигуру власти в сгусток ужаса.  \n\nМеня интересует только жестокость жизни. \n\n© Фрэнсис Бэкон\n\nЕго картины — это не истории, а ощущения. Они не просто передают эмоции, а заставляют в них утонуть.  \n\n#painting #artists\n👣 Void:Preshade",
+        "postOriginal": null,
+        "title": "Фрэнсис Бэкон - самый пугающий художник прошлого века",
+        "mainIdea": "Фрэнсис Бэкон писал картины, которые невозможно просто рассматривать — их приходится переживать. Размытые лица, искорёженные фигуры, затаённый крик.",
+        "tags": [
+          "painting",
+          "artists"
+        ],
+        "category": "новость",
+        "keywords": [
+          "Фрэнсис Бэкон",
+          "художник",
+          "картины",
+          "жестокость жизни",
+          "оценка"
+        ],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "edited",
+        "editedAt": "2025-02-20T12:19:43.000Z",
+        "deletedAt": null,
+        "added": "2025-02-20T12:15:31.000Z",
+        "aiVersion": 1,
+        "contentHash": "c9ad2e6366ddf6ff"
+      },
+      {
+        "id": 41,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 40,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-20T12:15:31.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 42,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 40,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-20T12:15:31.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 43,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 40,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-20T12:15:31.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 44,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": 40,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-02-20T12:15:31.000Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 45,
+        "post": "\"Чёрный квадрат\" Казимира Малевича — революция в искусстве\n\nКогда в 1915 году Казимир Малевич представил своё произведение \"Чёрный квадрат\", он не просто нарисовал квадрат — он изменил восприятие искусства. Данное произведение стало символом абсолютного освобождения от формы и содержания, отказом от традиционного изображения реальности.\n\nВ своём произведении автор не просто отказался от перспективы, объёмов и предметности, он отказался от всего, что можно было бы описать словами. \"Чёрный квадрат\" — это философия, выраженная через абстракцию, это вызов зрителю, чтобы он взглянул на искусство не как на отражение мира, а как на объект для рефлексии и осознания самого процесса творения.\n\nЭтот квадрат, простое сочетание черного и белого, стал основой супрематизма — направления, ставящего на первое место чистую форму и цвет, а не предметность. В каком-то смысле, \"Чёрный квадрат\" — это точка отсчёта для всех будущих экспериментов с абстракцией в искусстве, символ прорыва и нового пути. \n\n#painting\n👣 Void:Preshade",
+        "postOriginal": null,
+        "title": "Черный квадрат Казимира Малевича",
+        "mainIdea": "Революция в искусстве: как \"Черный квадрат\" Kazimira Malovicha изменил восприятие искусства",
+        "tags": [
+          "искусство",
+          "абстракция",
+          "супрематизм",
+          "Казимир Малевич"
+        ],
+        "category": "новость",
+        "keywords": [
+          "Черный квадрат",
+          "Казимир Малевич",
+          "супрематизм",
+          "абстракция",
+          "искусство"
+        ],
+        "media": {
+          "type": "photo",
+          "count": 1
+        },
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2025-03-03T13:12:33.000Z",
+        "aiVersion": 1,
+        "contentHash": "48d80d57938766c5"
+      },
+      {
+        "id": 96,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": null,
+        "mediaGroupId": null,
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "deleted",
+        "editedAt": null,
+        "deletedAt": "2026-06-05T23:35:20.480Z",
+        "added": "2026-03-08T14:57:25.268Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 97,
+        "post": "<b>Виргиль Аблох: Сочувствие и стиль</b>\n\nГлубокое понимание человека - это ключ к величине. Таково и мнение many, об Envoy и стILE Virgil Abloh.\n<blockquote> \nВVirgileAbloh life начались в Чикаго, где он создалEnvoy, свою первую туземную линейку. В 2009 году бренд получил признание в Италии и во всем мире.\n </blockquote>\n Дизайнер Virgil Abloh смирил с own Failures и обрёзся со стилем, который сделал его фаворитом среди many Design-enthusiast.\n\n ВVirgileAbloh work мы видим его способность видеть общий язык между людьми и создавать clothing, которое соединяет разных worldviews. \n\n ВVirgileAbloh life мы также видим его смелость противостоять Stereotype and Break free of normative Expectations.",
+        "postOriginal": null,
+        "title": "Сочувствие и стиль: Мнение о Virgil Abloh",
+        "mainIdea": "Глубокое понимание человека - ключ к величине, как считает many. В этом тексте мы будем разбираться с мнением о дизайнере Virgil Abloh и его способности видеть общий язык между людьми.",
+        "tags": [
+          "Virgil Abloh",
+          "стиль",
+          "дизайн",
+          "мнение",
+          "сочувствие"
+        ],
+        "category": "мнение",
+        "keywords": [
+          "Virgil Abloh",
+          "стиль",
+          "дизайн",
+          "сочувствие",
+          "мнение",
+          "стиль жизни",
+          "дизайнер",
+          "модерность"
+        ],
+        "media": {
+          "type": "photo",
+          "count": 4
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": null,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.341Z",
+        "aiVersion": 1,
+        "contentHash": "7a89b7c60580d78c"
+      },
+      {
+        "id": 98,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 4
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": 97,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.348Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 99,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 4
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": 97,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.351Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 100,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 4
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": 97,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.355Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 101,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 4
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": 97,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.359Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 102,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 4
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": 97,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.365Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 103,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 3
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": 97,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.367Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 104,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 4
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": 97,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.368Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 105,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 4
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": 97,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.369Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      },
+      {
+        "id": 106,
+        "post": "",
+        "postOriginal": null,
+        "title": "",
+        "mainIdea": "",
+        "tags": [],
+        "category": "",
+        "keywords": [],
+        "media": {
+          "type": "photo",
+          "count": 4
+        },
+        "mediaGroupId": "97",
+        "albumPrimaryId": 97,
+        "replyTo": null,
+        "replyToMissing": false,
+        "lifecycleStatus": "active",
+        "editedAt": null,
+        "deletedAt": null,
+        "added": "2026-06-06T00:48:51.370Z",
+        "aiVersion": 1,
+        "contentHash": "e3b0c44298fc1c14"
+      }
+    ]
+  },
+  "processed_posts": {
+    "entries": [
+      {
+        "id": 22,
+        "contentHash": "1b0f3ddb94736f7d",
+        "aiVersion": 1
+      },
+      {
+        "id": 27,
+        "contentHash": "26c67bad93f2ec8e",
+        "aiVersion": 1
+      },
+      {
+        "id": 35,
+        "contentHash": "5da781dab5735c78",
+        "aiVersion": 1
+      },
+      {
+        "id": 40,
+        "contentHash": "c9ad2e6366ddf6ff",
+        "aiVersion": 1
+      },
+      {
+        "id": 45,
+        "contentHash": "48d80d57938766c5",
+        "aiVersion": 1
+      },
+      {
+        "id": 97,
+        "contentHash": "7a89b7c60580d78c",
+        "aiVersion": 1
+      }
+    ]
+  },
+  "drafts": {
+    "drafts": []
+  },
+  "scheduled": {
+    "posts": [
+      {
+        "id": "091d85f0-5f8c-4035-a993-ee55ac60c6b4",
+        "userId": "972083480",
+        "chatId": 972083480,
+        "messageId": 114,
+        "publishAt": "2026-02-23T08:25:00.000Z",
+        "status": "published",
+        "createdAt": "2026-02-23T08:24:04.974Z",
+        "publishedAt": "2026-02-23T08:25:27.171Z"
+      }
+    ]
+  },
+  "access": null
+}

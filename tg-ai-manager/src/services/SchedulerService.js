@@ -1,4 +1,4 @@
-const { ADMIN_ID } = require('../config');
+const { ADMIN_ID, OWNER_TELEGRAM_ID } = require('../config');
 const MenuService = require('./MenuService');
 const ChatCleanupService = require('./ChatCleanupService');
 const PostService = require('./PostService');
@@ -41,26 +41,28 @@ class SchedulerService {
   }
 
   async notifyAdmin(channelMessage) {
-    await ChatCleanupService.flushBotMessages(this.bot, ADMIN_ID);
+    const notifyId = OWNER_TELEGRAM_ID || ADMIN_ID;
+    await ChatCleanupService.flushBotMessages(this.bot, notifyId);
 
     const url = buildPostUrl(channelMessage.message_id);
     const opts = url
       ? { reply_markup: { inline_keyboard: [[{ text: 'Перейти в канал', url }]] } }
       : {};
-    const msg = await this.bot.sendMessage(ADMIN_ID, 'Запланированный пост опубликован ✅', opts);
-    ChatCleanupService.trackBotMessage(ADMIN_ID, msg.message_id);
+    const msg = await this.bot.sendMessage(notifyId, 'Запланированный пост опубликован ✅', opts);
+    ChatCleanupService.trackBotMessage(notifyId, msg.message_id);
 
-    const menuMsg = await this.bot.sendMessage(ADMIN_ID, 'Выберите действие:', await MenuService.getMainMenu());
-    ChatCleanupService.trackBotMessage(ADMIN_ID, menuMsg.message_id);
+    const menuMsg = await this.bot.sendMessage(notifyId, 'Выберите действие:', await MenuService.getMainMenu());
+    ChatCleanupService.trackBotMessage(notifyId, menuMsg.message_id);
   }
 
   async notifyAdminError(message) {
-    await ChatCleanupService.flushBotMessages(this.bot, ADMIN_ID);
+    const notifyId = OWNER_TELEGRAM_ID || ADMIN_ID;
+    await ChatCleanupService.flushBotMessages(this.bot, notifyId);
     const msg = await this.bot.sendMessage(
-      ADMIN_ID,
+      notifyId,
       `❌ Не удалось опубликовать запланированный пост: ${message}`
     );
-    ChatCleanupService.trackBotMessage(ADMIN_ID, msg.message_id);
+    ChatCleanupService.trackBotMessage(notifyId, msg.message_id);
   }
 }
 

@@ -1,21 +1,17 @@
-const fs = require('fs/promises');
-const path = require('path');
+const JsonStore = require('../storage/JsonStore');
 const { v4: uuidv4 } = require('uuid');
-
-const SCHEDULED_FILE = path.join(__dirname, '../../storage/scheduled.json');
 
 class PostRepository {
   async _read() {
     try {
-      const data = await fs.readFile(SCHEDULED_FILE, 'utf-8');
-      return JSON.parse(data);
+      return await JsonStore.read('scheduled', { posts: [] });
     } catch {
       return { posts: [] };
     }
   }
 
   async _write(data) {
-    await fs.writeFile(SCHEDULED_FILE, JSON.stringify(data, null, 2));
+    await JsonStore.write('scheduled', data);
   }
 
   async addScheduled(userId, chatId, messageId, publishAt, meta = {}) {

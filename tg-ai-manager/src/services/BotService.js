@@ -1,5 +1,5 @@
 const TelegramBot = require('node-telegram-bot-api');
-const { BOT_TOKEN, ADMIN_ID, CHANNEL_ID } = require('../config');
+const { BOT_TOKEN, ADMIN_ID, CHANNEL_ID, OWNER_TELEGRAM_ID, STORAGE_BACKEND } = require('../config');
 const PostService = require('./PostService');
 const DraftService = require('./DraftService');
 const MenuService = require('./MenuService');
@@ -12,6 +12,12 @@ const ProcessedPosts = require('./ProcessedPosts');
 const SettingsService = require('./SettingsService');
 const SecretsService = require('./SecretsService');
 const SettingsUIService = require('./SettingsUIService');
+const AccessService = require('./AccessService');
+const SyncService = require('./SyncService');
+const StorageRegistry = require('../storage/StorageRegistry');
+const AdminHandlers = require('./AdminHandlers');
+const AdminPanelService = require('./AdminPanelService');
+const { t } = require('../i18n');
 const ChatCleanupService = require('./ChatCleanupService');
 const AiProviderRegistry = require('../ai/AiProviderRegistry');
 const { initChannelUrl, buildPostUrl, resolveChannelDisplay } = require('../utils/channelUrl');
@@ -90,7 +96,21 @@ const WORKFLOW_MODES = new Set([
   'waiting_date',
   'waiting_time',
   'waiting_ai_secret',
-  'waiting_timezone'
+  'waiting_timezone',
+  'waiting_access_password',
+  'waiting_admin_password',
+  'waiting_master_password',
+  'waiting_cloud_url',
+  'waiting_cloud_key',
+  'waiting_custom_ai_label',
+  'waiting_custom_ai_url',
+  'waiting_custom_ai_key',
+  'waiting_custom_ai_model',
+  'waiting_invite_custom',
+  'waiting_custom_ai_edit_label',
+  'waiting_custom_ai_edit_url',
+  'waiting_custom_ai_edit_key',
+  'waiting_custom_ai_edit_model'
 ]);
 
 class BotService {
@@ -104,15 +124,50 @@ class BotService {
 
     this.postService = new PostService(this.bot);
     this.postRepository = postRepository;
+    this.adminHandlers = new AdminHandlers(this);
 
     initChannelUrl(this.bot).catch(console.error);
 
     this.initHandlers();
-    this.setupAdminChatUi(Number(ADMIN_ID)).catch(console.error);
+    this.setupAdminChatUi(Number(OWNER_TELEGRAM_ID || ADMIN_ID)).catch(console.error);
   }
 
   isAdmin(userId) {
-    return String(userId) === ADMIN_ID;
+    return AccessService.isAuthorizedSync(userId);
+  }
+
+  isOwner(userId) {
+    return AccessService.isOwnerSync(userId);
+  }
+
+  getUserRole(userId) {
+    return AccessService.getRoleSync(userId) || (this.isOwner(userId) ? 'owner' : null);
+  }
+
+  async locale(userId) {
+    return SettingsService.getLocale();
+  }
+
+  async tLoc(key, params, userId) {
+    return t(key, params, await this.locale(userId));
+  }
+
+  async requireOwner(userId, message = null) {
+    if (this.isOwner(userId)) return true;
+    const msg = message || (await this.tLoc('menu.owner.only', null, userId));
+    await this.sendMessage(userId, msg);
+    return false;
+  }
+
+  async requireGuestAllowed(userId, message = null, { allowDraftsEdit = false } = {}) {
+    if (this.getUserRole(userId) !== 'guest') return true;
+    if (allowDraftsEdit) {
+      const perms = await SettingsService.getGuestPermissions();
+      if (perms.draftsEdit) return true;
+    }
+    const msg = message || (await this.tLoc('menu.guest.blocked', null, userId));
+    await this.sendMessage(userId, msg);
+    return false;
   }
 
   async clearState(userId, { releaseStaging = true, keepPinnedIds = [] } = {}) {
@@ -176,7 +231,7 @@ class BotService {
 
   async restoreWorkflowUi(userId, state) {
     if (!state) {
-      return this.sendMessage(userId, 'Выберите действие:', await MenuService.getMainMenu());
+      return this.sendMessage(userId, await this.tLoc('menu.main.choose', null, userId), await this.getMainMenuFor(userId));
     }
     delete state.cancelPrompt;
     stateManager.set(userId, state);
@@ -324,6 +379,7 @@ class BotService {
         [
           { command: 'start', description: 'Главное меню' },
           { command: 'settings', description: 'Настройки' },
+          { command: 'admin', description: 'Админ-панель' },
           { command: 'stats', description: 'Статистика' },
           { command: 'pinchannel', description: 'Закрепить канал' }
         ],
@@ -398,18 +454,42 @@ class BotService {
     this.bot.onText(/\/pinchannel/, (msg) => this.handlePinChannel(msg));
     this.bot.onText(/\/stats/, (msg) => this.handleStats(msg));
     this.bot.onText(/\/settings/, (msg) => this.handleSettings(msg));
+    this.bot.onText(/\/admin/, (msg) => this.handleAdmin(msg));
+    this.bot.onText(/\/panel/, (msg) => this.handleAdmin(msg));
     this.bot.on('callback_query', (query) => this.handleCallback(query));
     this.bot.on('message', (msg) => this.handleMessage(msg));
     this.bot.on('channel_post', (msg) => this.handleChannelPost(msg));
     this.bot.on('edited_channel_post', (msg) => this.handleEditedChannelPost(msg));
   }
 
-  async handleStart(msg) {
-    if (!this.isAdmin(msg.from.id)) return;
+  async handleAdmin(msg) {
+    const userId = msg.from.id;
     await ChatCleanupService.consumeUserMessage(this.bot, msg);
-    await this.clearState(msg.from.id);
-    await this.setupAdminChatUi(msg.from.id);
-    await this.sendMessage(msg.chat.id, 'Выберите действие:', await MenuService.getMainMenu());
+    return this.adminHandlers.promptEntry(userId);
+  }
+
+  async handleStart(msg) {
+    const userId = msg.from.id;
+    const loc = await this.locale(userId);
+    await ChatCleanupService.consumeUserMessage(this.bot, msg);
+    await this.clearState(userId);
+
+    if (String(OWNER_TELEGRAM_ID || ADMIN_ID) === String(userId) && !(await AccessService.isMasterPasswordSet())) {
+      await AccessService.bootstrapOwnerSession(userId);
+    }
+
+    if (this.isAdmin(userId)) {
+      await this.setupAdminChatUi(userId);
+      const role = this.getUserRole(userId) || 'owner';
+      return this.sendMessage(
+        msg.chat.id,
+        await this.tLoc('menu.main.choose', null, userId),
+        await MenuService.getMainMenu(null, { role, locale: loc })
+      );
+    }
+
+    stateManager.set(userId, { mode: 'waiting_access_password' });
+    return this.sendMessage(userId, t('auth.welcome', null, loc), { parse_mode: 'HTML', noNav: true });
   }
 
   async handlePinChannel(msg) {
@@ -437,6 +517,13 @@ class BotService {
     } catch (e) {
       console.error('pin failed', e);
     }
+  }
+
+  async getMainMenuFor(userId) {
+    const ui = await UiStyleService.get();
+    const locale = await this.locale(userId);
+    const role = this.getUserRole(userId) === 'guest' ? 'guest' : 'owner';
+    return MenuService.getMainMenu(ui, { role, locale });
   }
 
   async handleCallback(query) {
@@ -474,9 +561,9 @@ class BotService {
       await this.clearState(userId);
 
       if (fromHistory) {
-        return this.sendMessage(userId, '📋 История закрыта. Выберите действие:', await MenuService.getMainMenu());
+        return this.sendMessage(userId, '📋 История закрыта. Выберите действие:', await this.getMainMenuFor(userId));
       }
-      return this.sendMessage(userId, 'Выберите действие:', await MenuService.getMainMenu());
+      return this.sendMessage(userId, 'Выберите действие:', await this.getMainMenuFor(userId));
     }
 
     if (data === 'cancel_stay') {
@@ -499,10 +586,19 @@ class BotService {
         return this.promptWorkflowExit(userId, state);
       }
       await this.clearState(userId);
-      return this.sendMessage(userId, 'Выберите действие:', await MenuService.getMainMenu());
+      return this.sendMessage(userId, 'Выберите действие:', await this.getMainMenuFor(userId));
+    }
+
+    if (data === 'access_logout') {
+      await AccessService.logout(userId);
+      await this.clearState(userId);
+      const loc = await this.locale(userId);
+      stateManager.set(userId, { mode: 'waiting_access_password' });
+      return this.sendMessage(userId, t('auth.logout', null, loc), { noNav: true });
     }
 
     if (data === 'menu_publish') {
+      if (!(await this.requireGuestAllowed(userId))) return;
       return this.sendMessage(userId, 'Как опубликовать?', await MenuService.getPublishModeMenu());
     }
 
@@ -541,6 +637,11 @@ class BotService {
 
     if (data === 'menu_settings' || data.startsWith('settings_')) {
       return this.handleSettingsCallback(userId, data, query);
+    }
+
+    if (data.startsWith('admin_')) {
+      if (!(await this.requireOwner(userId))) return;
+      return this.adminHandlers.handleCallback(userId, data);
     }
 
     if (!state?.chatId && !['publish_now', 'publish_delay', 'save_draft'].includes(data)) {
@@ -597,6 +698,11 @@ class BotService {
   }
 
   async handleDraftCallback(userId, data, state) {
+    const guestMutating =
+      /draft_(delete|edit|publish|wizard_delete|wizard_resume)/.test(data) ||
+      data === 'draft_publish_now';
+    if (guestMutating && !(await this.requireGuestAllowed(userId, null, { allowDraftsEdit: true }))) return;
+
     const wizardResumeMatch = data.match(/^draft_wizard_resume_(.+)$/);
     if (wizardResumeMatch) {
       const draft = await DraftService.getById(userId, wizardResumeMatch[1]);
@@ -634,7 +740,7 @@ class BotService {
 
     if (data === 'draft_cancel') {
       await this.clearState(userId);
-      return this.sendMessage(userId, 'Выберите действие:', await MenuService.getMainMenu());
+      return this.sendMessage(userId, await this.tLoc('menu.main.choose', null, userId), await this.getMainMenuFor(userId));
     }
 
     const selectMatch = data.match(/^draft_select_(.+)$/);
@@ -743,6 +849,7 @@ class BotService {
   }
 
   async handleHistoryCallback(userId, data, state) {
+    const guestBlock = async () => this.requireGuestAllowed(userId);
     let filter = state?.historyFilter || 'published';
     let page = state?.historyPage || 0;
 
@@ -762,6 +869,7 @@ class BotService {
       filter = 'deleted';
       page = 0;
     } else if (data === 'history_sync') {
+      if (!(await guestBlock())) return;
       filter = state?.historyFilter || 'published';
       page = state?.historyPage || 0;
       if (!ChannelReconcileService.canReconcile()) {
@@ -813,6 +921,7 @@ class BotService {
 
     const cancelMatch = data.match(/^history_sch_cancel_([0-9a-f-]+)$/);
     if (cancelMatch) {
+      if (!(await guestBlock())) return;
       await this.postRepository.removeScheduled(cancelMatch[1]);
       await this.sendMessage(userId, 'Запланированный пост отменён ✅');
       filter = state?.historyFilter || 'scheduled';
@@ -827,6 +936,7 @@ class BotService {
 
     const nowMatch = data.match(/^history_sch_now_([0-9a-f-]+)$/);
     if (nowMatch) {
+      if (!(await guestBlock())) return;
       const scheduled = await this.postRepository.getById(nowMatch[1]);
       if (!scheduled || scheduled.status !== 'pending') {
         return this.sendMessage(userId, 'Пост не найден или уже опубликован.', await MenuService.getMainMenu());
@@ -855,6 +965,7 @@ class BotService {
 
     const rescheduleMatch = data.match(/^history_sch_reschedule_([0-9a-f-]+)$/);
     if (rescheduleMatch) {
+      if (!(await guestBlock())) return;
       const scheduled = await this.postRepository.getById(rescheduleMatch[1]);
       if (!scheduled || scheduled.status !== 'pending') {
         return this.sendMessage(userId, 'Пост не найден.', await MenuService.getMainMenu());
@@ -952,10 +1063,11 @@ class BotService {
 
   async showSettingsRoot(userId) {
     const ui = await UiStyleService.get();
+    const locale = await this.locale(userId);
     const text = await SettingsUIService.formatSettingsRoot();
     return this.sendMessage(userId, text, {
       parse_mode: 'HTML',
-      ...MenuService.getSettingsRootMenu(ui)
+      ...(await MenuService.getSettingsRootMenu(ui, locale))
     });
   }
 
@@ -972,25 +1084,35 @@ class BotService {
     const active = await SettingsService.getActiveProvider();
     const autoEnrich = await SettingsService.getAutoEnrich();
     const configuredIds = await SettingsUIService.getConfiguredProviderIds();
+    const locale = await this.locale(userId);
     const text = await SettingsUIService.formatAiScreen();
     return this.sendMessage(userId, text, {
       parse_mode: 'HTML',
-      ...MenuService.getSettingsAiMenu(active, autoEnrich, configuredIds)
+      ...(await MenuService.getSettingsAiMenu(active, autoEnrich, configuredIds, locale))
     });
   }
 
   async showSettingsGeneral(userId) {
     const tz = await SettingsService.getTimezone();
     const chatCleanup = await SettingsService.getChatCleanup();
+    const locale = await this.locale(userId);
     const text = await SettingsUIService.formatGeneralScreen();
     return this.sendMessage(userId, text, {
       parse_mode: 'HTML',
-      ...MenuService.getSettingsGeneralMenu(tz, chatCleanup)
+      ...(await MenuService.getSettingsGeneralMenu(tz, chatCleanup, locale))
     });
   }
 
+  async showSettingsCloud(userId) {
+    return this.adminHandlers.showCloud(userId);
+  }
+
+  async showSettingsAccess(userId) {
+    return this.adminHandlers.showAccess(userId);
+  }
+
   async showSettingsHelp(userId) {
-    const text = SettingsUIService.formatHelpScreen();
+    const text = await SettingsUIService.formatHelpScreen(await this.locale(userId));
     return this.sendMessage(userId, text, {
       parse_mode: 'HTML',
       ...MenuService.getSettingsHelpMenu()
@@ -998,6 +1120,27 @@ class BotService {
   }
 
   async handleSettingsCallback(userId, data, query) {
+    const guestAllowed =
+      data === 'menu_settings' ||
+      data === 'settings_back_root' ||
+      data === 'settings_general' ||
+      data === 'settings_appearance' ||
+      data === 'settings_ui_toggle_emojis' ||
+      data === 'settings_ui_nav_text' ||
+      data === 'settings_ui_nav_arrows' ||
+      data === 'settings_help' ||
+      data === 'settings_language' ||
+      data === 'settings_lang_ru' ||
+      data === 'settings_lang_en' ||
+      data === 'settings_toggle_cleanup' ||
+      data === 'settings_tz_manual' ||
+      /^settings_tz_/.test(data);
+
+    if (!guestAllowed && !(await this.requireOwner(userId))) return;
+    if (guestAllowed && this.getUserRole(userId) === 'guest' && (data === 'settings_ai' || data.startsWith('settings_ai_'))) {
+      return this.requireOwner(userId);
+    }
+
     if (data === 'menu_settings' || data === 'settings_back_root') {
       await this.clearState(userId);
       return this.showSettingsRoot(userId);
@@ -1041,6 +1184,76 @@ class BotService {
       return this.showSettingsHelp(userId);
     }
 
+    if (data === 'settings_language') {
+      const loc = await SettingsService.getLocale();
+      return this.sendMessage(
+        userId,
+        `<b>${t('settings.language', null, loc)}</b>`,
+        { parse_mode: 'HTML', ...(await MenuService.getSettingsLanguageMenu(loc, loc)) }
+      );
+    }
+
+    if (data === 'settings_lang_ru' || data === 'settings_lang_en') {
+      const newLoc = data === 'settings_lang_en' ? 'en' : 'ru';
+      await SettingsService.setLocale(newLoc);
+      const label = t(newLoc === 'en' ? 'settings.lang.en' : 'settings.lang.ru', null, newLoc);
+      await this.sendMessage(userId, t('settings.lang.changed', { lang: label }, newLoc));
+      return this.showSettingsGeneral(userId);
+    }
+
+    if (data === 'settings_ai_custom_start') {
+      stateManager.set(userId, { mode: 'waiting_custom_ai_label', customAi: {} });
+      const loc = await this.locale(userId);
+      return this.sendMessage(userId, t('settings.ai.custom.label_prompt', null, loc));
+    }
+
+    if (data === 'settings_ai_custom_manage') {
+      const loc = await this.locale(userId);
+      const providers = await SettingsService.getCustomProviders();
+      if (!providers.length) {
+        return this.sendMessage(userId, t('settings.ai.custom.label_prompt', null, loc));
+      }
+      return this.sendMessage(
+        userId,
+        '✏️ ' + t('settings.ai.custom.edit', null, loc),
+        await MenuService.getSettingsCustomAiManageMenu(loc)
+      );
+    }
+
+    const customEditMatch = data.match(/^settings_ai_custom_edit_(.+)$/);
+    if (customEditMatch) {
+      const provider = await SettingsService.getCustomProvider(customEditMatch[1]);
+      if (!provider) return this.showSettingsAi(userId);
+      const loc = await this.locale(userId);
+      return this.sendMessage(
+        userId,
+        `<b>${provider.label}</b>\n${provider.baseUrl}`,
+        { parse_mode: 'HTML', ...(await MenuService.getSettingsCustomAiEditMenu(provider.id, loc)) }
+      );
+    }
+
+    const editFieldMatch = data.match(/^settings_ai_edit_(.+)_(label|url|key|model)$/);
+    if (editFieldMatch) {
+      const [, providerId, field] = editFieldMatch;
+      const provider = await SettingsService.getCustomProvider(providerId);
+      if (!provider) return this.showSettingsAi(userId);
+      const loc = await this.locale(userId);
+      const modeMap = {
+        label: 'waiting_custom_ai_edit_label',
+        url: 'waiting_custom_ai_edit_url',
+        key: 'waiting_custom_ai_edit_key',
+        model: 'waiting_custom_ai_edit_model'
+      };
+      stateManager.set(userId, { mode: modeMap[field], customAiEdit: { providerId } });
+      const promptKey = {
+        label: 'settings.ai.custom.label_prompt',
+        url: 'settings.ai.custom.url_prompt',
+        key: 'settings.ai.custom.key_prompt',
+        model: 'settings.ai.custom.model_prompt'
+      }[field];
+      return this.sendMessage(userId, t(promptKey, null, loc));
+    }
+
     if (data === 'settings_toggle_cleanup') {
       const current = await SettingsService.getChatCleanup();
       await SettingsService.setChatCleanup(!current);
@@ -1056,7 +1269,7 @@ class BotService {
     if (data === 'settings_ai_pick_list') {
       const configuredIds = await SettingsUIService.getConfiguredProviderIds();
       if (configuredIds.length === 0) {
-        return this.sendMessage(userId, 'Сначала подключите сервис в разделе «Подключить сервис».', MenuService.getSettingsAddProviderMenu());
+        return this.sendMessage(userId, 'Сначала подключите сервис в разделе «Подключить сервис».', await MenuService.getSettingsAddProviderMenu());
       }
       const active = await SettingsService.getActiveProvider();
       return this.sendMessage(
@@ -1067,7 +1280,7 @@ class BotService {
     }
 
     if (data === 'settings_ai_add') {
-      return this.sendMessage(userId, 'Какой сервис подключить?', MenuService.getSettingsAddProviderMenu());
+      return this.sendMessage(userId, 'Какой сервис подключить?', await MenuService.getSettingsAddProviderMenu());
     }
 
     const pickMatch = data.match(/^settings_ai_pick_(.+)$/);
@@ -1104,12 +1317,19 @@ class BotService {
     const removeMatch = data.match(/^settings_ai_remove_(.+)$/);
     if (removeMatch) {
       const providerId = removeMatch[1];
+      const wasCustom = AiProviderRegistry.isCustom(providerId);
       await SecretsService.removeProviderSecret(providerId);
+      if (wasCustom) {
+        await SettingsService.removeCustomProvider(providerId);
+        await AiProviderRegistry.refreshCustom();
+      }
       const active = await SettingsService.getActiveProvider();
       if (active === providerId) {
         await SettingsService.setActiveProvider(null);
       }
-      await this.sendMessage(userId, 'Сервис отключён ✅');
+      const loc = await this.locale(userId);
+      const msg = wasCustom ? t('settings.ai.custom.removed', null, loc) : 'Сервис отключён';
+      await this.sendMessage(userId, msg + ' ✅');
       return this.showSettingsAi(userId);
     }
 
@@ -1153,6 +1373,40 @@ class BotService {
 
   async handleMessage(msg) {
     const userId = msg.from.id;
+    let state = stateManager.get(userId);
+
+    if (state?.mode === 'waiting_access_password') {
+      await ChatCleanupService.consumeUserMessage(this.bot, msg);
+      const loc = await this.locale(userId);
+      const password = msg.text?.trim();
+      if (!password) {
+        return this.sendMessage(userId, t('auth.invalid', null, loc), { noNav: true });
+      }
+      const result = await AccessService.authenticate(userId, password);
+      if (!result.ok) {
+        const errKey = result.error === 'rate_limited' ? 'auth.rate_limited' : 'auth.invalid';
+        return this.sendMessage(userId, '❌ ' + t(errKey, null, loc), { noNav: true });
+      }
+      await this.clearState(userId);
+      await this.setupAdminChatUi(userId);
+      const roleLabel = t(result.role === 'owner' ? 'auth.role.owner' : 'auth.role.guest', null, loc);
+      await this.sendMessage(
+        userId,
+        '✅ ' + t('auth.success', { role: roleLabel }, loc),
+        await this.getMainMenuFor(userId)
+      );
+      return;
+    }
+
+    if (state?.mode === 'waiting_admin_password') {
+      return this.adminHandlers.handleAdminPassword(userId, msg, state);
+    }
+
+    if (state?.mode === 'waiting_invite_custom') {
+      if (!(await this.adminHandlers.requireSession(userId))) return;
+      return this.adminHandlers.handleInviteCustom(userId, msg, state);
+    }
+
     if (!this.isAdmin(userId)) return;
 
     if (msg.text && (await MenuService.getReplyMenuLabels()).includes(msg.text)) {
@@ -1162,12 +1416,12 @@ class BotService {
         return this.promptWorkflowExit(userId, menuState);
       }
       await this.clearState(userId);
-      return this.sendMessage(userId, 'Выберите действие:', await MenuService.getMainMenu());
+      return this.sendMessage(userId, await this.tLoc('menu.main.choose', null, userId), await this.getMainMenuFor(userId));
     }
 
     if (msg.text?.startsWith('/')) return;
 
-    let state = stateManager.get(userId);
+    state = stateManager.get(userId);
     if (!state) return;
 
     const preserveUserMessage =
@@ -1284,6 +1538,189 @@ class BotService {
       return this.sendMessage(userId, 'Пожалуйста, выберите дату нажатием на клавиатуру.');
     }
 
+    if (state.mode === 'waiting_master_password') {
+      const loc = await this.locale(userId);
+      const value = msg.text?.trim();
+      if (!value || value.length < 6) {
+        return this.sendMessage(userId, t('admin.prompt.set_password', null, loc));
+      }
+      await ChatCleanupService.deleteUserMessage(this.bot, msg.chat.id, msg.message_id);
+      await AccessService.setMasterPassword(value);
+      const adminReturn = state.adminReturn;
+      await this.clearState(userId);
+      AdminPanelService.grant(userId);
+      await this.sendMessage(userId, '✅ ' + t('admin.access.password_saved', null, loc));
+      if (adminReturn === 'access') return this.adminHandlers.showAccess(userId);
+      return this.adminHandlers.showHub(userId);
+    }
+
+    if (state.mode === 'waiting_cloud_url') {
+      const loc = await this.locale(userId);
+      const url = msg.text?.trim();
+      if (!url || !/^https:\/\/.+\.supabase\.co\/?$/i.test(url)) {
+        return this.sendMessage(userId, t('admin.cloud.url_prompt', null, loc));
+      }
+      await ChatCleanupService.consumeUserMessage(this.bot, msg);
+      await SecretsService.setSupabaseConfig({ url: url.replace(/\/$/, '') });
+      await SettingsService.setCloud({ supabaseUrl: url.replace(/\/$/, '') });
+      const adminReturn = state.adminReturn;
+      await this.clearState(userId);
+      await this.sendMessage(userId, '✅ ' + t('admin.cloud.url_saved', null, loc));
+      if (adminReturn) return this.adminHandlers.showCloud(userId);
+      return this.adminHandlers.showCloud(userId);
+    }
+
+    if (state.mode === 'waiting_cloud_key') {
+      const loc = await this.locale(userId);
+      const key = msg.text?.trim();
+      if (!key || key.length < 20) {
+        return this.sendMessage(userId, t('admin.cloud.key_prompt', null, loc));
+      }
+      await ChatCleanupService.deleteUserMessage(this.bot, msg.chat.id, msg.message_id);
+      await SecretsService.setSupabaseConfig({ serviceKey: key });
+      StorageRegistry.reset();
+      await this.clearState(userId);
+      await this.sendMessage(userId, '✅ ' + t('admin.cloud.key_saved', null, loc));
+      return this.adminHandlers.showCloud(userId);
+    }
+
+    if (state.mode === 'waiting_custom_ai_label') {
+      const loc = await this.locale(userId);
+      const label = msg.text?.trim();
+      if (!label) return this.sendMessage(userId, t('settings.ai.custom.label_prompt', null, loc));
+      state.customAi = { label };
+      state.mode = 'waiting_custom_ai_url';
+      stateManager.set(userId, state);
+      return this.sendMessage(userId, t('settings.ai.custom.url_prompt', null, loc));
+    }
+
+    if (state.mode === 'waiting_custom_ai_url') {
+      const loc = await this.locale(userId);
+      const baseUrl = msg.text?.trim();
+      if (!baseUrl || !/^https?:\/\/.+/i.test(baseUrl)) {
+        return this.sendMessage(userId, t('settings.ai.custom.url_prompt', null, loc));
+      }
+      state.customAi.baseUrl = baseUrl;
+      state.mode = 'waiting_custom_ai_key';
+      stateManager.set(userId, state);
+      return this.sendMessage(userId, t('settings.ai.custom.key_prompt', null, loc));
+    }
+
+    if (state.mode === 'waiting_custom_ai_key') {
+      const loc = await this.locale(userId);
+      let key = msg.text?.trim();
+      if (key === '-') key = '';
+      await ChatCleanupService.deleteUserMessage(this.bot, msg.chat.id, msg.message_id);
+      state.customAi.apiKey = key;
+      state.customAi.requiresKey = Boolean(key);
+      state.mode = 'waiting_custom_ai_model';
+      stateManager.set(userId, state);
+      return this.sendMessage(userId, t('settings.ai.custom.model_prompt', null, loc));
+    }
+
+    if (state.mode === 'waiting_custom_ai_model') {
+      const loc = await this.locale(userId);
+      const model = msg.text?.trim();
+      if (!model) return this.sendMessage(userId, t('settings.ai.custom.model_prompt', null, loc));
+      const draft = state.customAi || {};
+      await this.sendMessage(userId, t('settings.ai.custom.testing', null, loc));
+      try {
+        const row = await SettingsService.addCustomProvider({
+          label: draft.label,
+          baseUrl: draft.baseUrl,
+          defaultModel: model,
+          requiresKey: draft.requiresKey !== false
+        });
+        await SecretsService.setProviderSecret(row.id, { apiKey: draft.apiKey || '' });
+        await AiProviderRegistry.refreshCustom();
+        await AiProviderRegistry.validateConfig(row.id, { apiKey: draft.apiKey || '' }, model);
+        await SettingsService.setActiveProvider(row.id);
+        await this.clearState(userId);
+        await this.sendMessage(userId, '✅ ' + t('settings.ai.custom.saved', { label: row.label }, loc));
+        return this.showSettingsAi(userId);
+      } catch (err) {
+        const failedId = SettingsService.slugifyLabel(draft.label);
+        const existing = await SettingsService.getCustomProvider(failedId);
+        if (existing) {
+          await SettingsService.removeCustomProvider(existing.id);
+          await SecretsService.removeProviderSecret(existing.id);
+          await AiProviderRegistry.refreshCustom();
+        }
+        await this.sendMessage(userId, t('settings.ai.custom.fail', { error: err.message }, loc), { parse_mode: 'HTML' });
+        await this.clearState(userId);
+        return this.showSettingsAi(userId);
+      }
+    }
+
+    const editModes = [
+      'waiting_custom_ai_edit_label',
+      'waiting_custom_ai_edit_url',
+      'waiting_custom_ai_edit_key',
+      'waiting_custom_ai_edit_model'
+    ];
+    if (editModes.includes(state.mode)) {
+      const loc = await this.locale(userId);
+      const { providerId } = state.customAiEdit || {};
+      const provider = providerId ? await SettingsService.getCustomProvider(providerId) : null;
+      if (!provider) {
+        await this.clearState(userId);
+        return this.showSettingsAi(userId);
+      }
+      const value = msg.text?.trim();
+      if (state.mode === 'waiting_custom_ai_edit_key') {
+        if (value === undefined || value === '') {
+          return this.sendMessage(userId, t('settings.ai.custom.key_prompt', null, loc));
+        }
+        let key = value === '-' ? '' : value;
+        await ChatCleanupService.deleteUserMessage(this.bot, msg.chat.id, msg.message_id);
+        await SecretsService.setProviderSecret(providerId, { apiKey: key });
+        await AiProviderRegistry.refreshCustom();
+        const model = (await SettingsService.getModel(providerId)) || provider.defaultModel;
+        try {
+          await AiProviderRegistry.validateConfig(providerId, { apiKey: key }, model);
+        } catch (err) {
+          await this.sendMessage(userId, t('settings.ai.custom.fail', { error: err.message }, loc), { parse_mode: 'HTML' });
+          await this.clearState(userId);
+          return this.showSettingsAi(userId);
+        }
+        await this.clearState(userId);
+        await this.sendMessage(userId, '✅ ' + t('settings.ai.custom.updated', { label: provider.label }, loc));
+        return this.showSettingsAi(userId);
+      }
+      if (!value) {
+        const promptKey = {
+          waiting_custom_ai_edit_label: 'settings.ai.custom.label_prompt',
+          waiting_custom_ai_edit_url: 'settings.ai.custom.url_prompt',
+          waiting_custom_ai_edit_model: 'settings.ai.custom.model_prompt'
+        }[state.mode];
+        return this.sendMessage(userId, t(promptKey, null, loc));
+      }
+      const patch = {};
+      if (state.mode === 'waiting_custom_ai_edit_label') patch.label = value;
+      if (state.mode === 'waiting_custom_ai_edit_url') {
+        if (!/^https?:\/\/.+/i.test(value)) {
+          return this.sendMessage(userId, t('settings.ai.custom.url_prompt', null, loc));
+        }
+        patch.baseUrl = value;
+      }
+      if (state.mode === 'waiting_custom_ai_edit_model') patch.defaultModel = value;
+      await this.sendMessage(userId, t('settings.ai.custom.testing', null, loc));
+      try {
+        const updated = await SettingsService.updateCustomProvider(providerId, patch);
+        await AiProviderRegistry.refreshCustom();
+        const secrets = await SecretsService.getProviderSecret(providerId);
+        const model = patch.defaultModel || (await SettingsService.getModel(providerId)) || updated.defaultModel;
+        await AiProviderRegistry.validateConfig(providerId, secrets, model);
+        await this.clearState(userId);
+        await this.sendMessage(userId, '✅ ' + t('settings.ai.custom.updated', { label: updated.label }, loc));
+        return this.showSettingsAi(userId);
+      } catch (err) {
+        await this.sendMessage(userId, t('settings.ai.custom.fail', { error: err.message }, loc), { parse_mode: 'HTML' });
+        await this.clearState(userId);
+        return this.showSettingsAi(userId);
+      }
+    }
+
     if (state.mode === 'waiting_ai_secret') {
       const provider = AiProviderRegistry.get(state.providerId);
       if (!provider) {
@@ -1310,17 +1747,19 @@ class BotService {
         await AiProviderRegistry.validateConfig(state.providerId, fields, model);
         await SettingsService.setActiveProvider(state.providerId);
         const masked = SecretsService.maskSecret(value);
+        const locale = await this.locale(userId);
         await this.sendMessage(
           userId,
           `✅ ${provider.label} подключён (${masked}). Сервис активирован.`,
-          MenuService.getSettingsAiMenu(state.providerId, autoEnrich, configuredIds)
+          await MenuService.getSettingsAiMenu(state.providerId, autoEnrich, configuredIds, locale)
         );
       } catch (err) {
         await SecretsService.removeProviderSecret(state.providerId);
         const ids = await SettingsUIService.getConfiguredProviderIds();
+        const locale = await this.locale(userId);
         await this.sendMessage(userId, SettingsUIService.formatAiConnectError(err), {
           parse_mode: 'HTML',
-          ...MenuService.getSettingsAiMenu(await SettingsService.getActiveProvider(), autoEnrich, ids)
+          ...(await MenuService.getSettingsAiMenu(await SettingsService.getActiveProvider(), autoEnrich, ids, locale))
         });
       }
 

@@ -1,21 +1,17 @@
-const fs = require('fs/promises');
-const path = require('path');
+const JsonStore = require('../storage/JsonStore');
 const { v4: uuidv4 } = require('uuid');
-
-const DRAFTS_FILE = path.join(__dirname, '../../storage/drafts.json');
 
 class DraftService {
   async _read() {
     try {
-      const data = await fs.readFile(DRAFTS_FILE, 'utf-8');
-      return JSON.parse(data);
+      return await JsonStore.read('drafts', { drafts: [] });
     } catch {
       return { drafts: [] };
     }
   }
 
   async _write(data) {
-    await fs.writeFile(DRAFTS_FILE, JSON.stringify(data, null, 2));
+    await JsonStore.write('drafts', data);
   }
 
   async add(userId, chatId, messageId, { stagingMessageIds, stagedMeta, previewText, media } = {}) {

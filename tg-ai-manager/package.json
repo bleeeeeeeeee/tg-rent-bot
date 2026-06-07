@@ -9,13 +9,16 @@
     "import:export": "node scripts/import-from-export.js",
     "reconcile": "node scripts/reconcile-channel.js",
     "enrich": "node scripts/enrich-all.js",
-    "gram:login": "node scripts/gram-login.js"
+    "gram:login": "node scripts/gram-login.js",
+    "backup:export": "node scripts/backup-export.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@supabase/supabase-js": "^2.107.0",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.3.1",
     "node-telegram-bot-api": "^0.67.0",
     "openai": "^6.25.0",
