@@ -1636,7 +1636,7 @@ class BotService {
         await AiProviderRegistry.validateConfig(row.id, { apiKey: draft.apiKey || '' }, model);
         await SettingsService.setActiveProvider(row.id);
         await this.clearState(userId);
-        await this.sendMessage(userId, '✅ ' + t('settings.ai.custom.saved', { label: row.label }, loc));
+        await this.sendMessage(userId, '✅ ' + t('settings.ai.custom.saved', { label: row.label }, loc), {}, { append: true });
         return this.showSettingsAi(userId);
       } catch (err) {
         const failedId = SettingsService.slugifyLabel(draft.label);
@@ -1646,7 +1646,7 @@ class BotService {
           await SecretsService.removeProviderSecret(existing.id);
           await AiProviderRegistry.refreshCustom();
         }
-        await this.sendMessage(userId, t('settings.ai.custom.fail', { error: err.message }, loc), { parse_mode: 'HTML' });
+        await this.sendMessage(userId, t('settings.ai.custom.fail', { error: err.message }, loc), { parse_mode: 'HTML' }, { append: true });
         await this.clearState(userId);
         return this.showSettingsAi(userId);
       }
@@ -1679,12 +1679,12 @@ class BotService {
         try {
           await AiProviderRegistry.validateConfig(providerId, { apiKey: key }, model);
         } catch (err) {
-          await this.sendMessage(userId, t('settings.ai.custom.fail', { error: err.message }, loc), { parse_mode: 'HTML' });
+          await this.sendMessage(userId, t('settings.ai.custom.fail', { error: err.message }, loc), { parse_mode: 'HTML' }, { append: true });
           await this.clearState(userId);
           return this.showSettingsAi(userId);
         }
         await this.clearState(userId);
-        await this.sendMessage(userId, '✅ ' + t('settings.ai.custom.updated', { label: provider.label }, loc));
+        await this.sendMessage(userId, '✅ ' + t('settings.ai.custom.updated', { label: provider.label }, loc), {}, { append: true });
         return this.showSettingsAi(userId);
       }
       if (!value) {
@@ -1712,10 +1712,10 @@ class BotService {
         const model = patch.defaultModel || (await SettingsService.getModel(providerId)) || updated.defaultModel;
         await AiProviderRegistry.validateConfig(providerId, secrets, model);
         await this.clearState(userId);
-        await this.sendMessage(userId, '✅ ' + t('settings.ai.custom.updated', { label: updated.label }, loc));
+        await this.sendMessage(userId, '✅ ' + t('settings.ai.custom.updated', { label: updated.label }, loc), {}, { append: true });
         return this.showSettingsAi(userId);
       } catch (err) {
-        await this.sendMessage(userId, t('settings.ai.custom.fail', { error: err.message }, loc), { parse_mode: 'HTML' });
+        await this.sendMessage(userId, t('settings.ai.custom.fail', { error: err.message }, loc), { parse_mode: 'HTML' }, { append: true });
         await this.clearState(userId);
         return this.showSettingsAi(userId);
       }
@@ -1740,27 +1740,38 @@ class BotService {
       await SecretsService.setProviderSecret(state.providerId, fields);
 
       const model = (await SettingsService.getModel(state.providerId)) || provider.defaultModel;
-      const configuredIds = await SettingsUIService.getConfiguredProviderIds();
+      const locale = await this.locale(userId);
       const autoEnrich = await SettingsService.getAutoEnrich();
 
       try {
         await AiProviderRegistry.validateConfig(state.providerId, fields, model);
         await SettingsService.setActiveProvider(state.providerId);
         const masked = SecretsService.maskSecret(value);
-        const locale = await this.locale(userId);
+        const configuredIds = await SettingsUIService.getConfiguredProviderIds();
         await this.sendMessage(
           userId,
           `✅ ${provider.label} подключён (${masked}). Сервис активирован.`,
-          await MenuService.getSettingsAiMenu(state.providerId, autoEnrich, configuredIds, locale)
+          await MenuService.getSettingsAiMenu(state.providerId, autoEnrich, configuredIds, locale),
+          { append: true }
         );
       } catch (err) {
         await SecretsService.removeProviderSecret(state.providerId);
         const ids = await SettingsUIService.getConfiguredProviderIds();
-        const locale = await this.locale(userId);
-        await this.sendMessage(userId, SettingsUIService.formatAiConnectError(err), {
-          parse_mode: 'HTML',
-          ...(await MenuService.getSettingsAiMenu(await SettingsService.getActiveProvider(), autoEnrich, ids, locale))
-        });
+        const errText = await SettingsUIService.formatAiConnectError(err, locale);
+        try {
+          await this.sendMessage(userId, errText, {
+            parse_mode: 'HTML',
+            ...(await MenuService.getSettingsAiMenu(await SettingsService.getActiveProvider(), autoEnrich, ids, locale))
+          }, { append: true });
+        } catch (sendErr) {
+          console.error('[BotService] AI connect error UI failed:', sendErr.message);
+          await this.sendMessage(
+            userId,
+            `❌ Не удалось подключить ${provider.label}. ${err?.message || sendErr.message}`,
+            await MenuService.getSettingsAiMenu(await SettingsService.getActiveProvider(), autoEnrich, ids, locale),
+            { append: true, noNav: true }
+          );
+        }
       }
 
       await this.clearState(userId);
