@@ -38,6 +38,7 @@ process.on('unhandledRejection', (err) => console.error('unhandledRejection', er
     console.log('\nMode: channel monitoring enabled 🔄\n');
 
     const botService = new BotService(PostRepository);
+    console.log('✅ Telegram polling active\n');
     const scheduler = new SchedulerService(botService.bot, PostRepository, botService.postService);
     scheduler.start();
   } catch (err) {

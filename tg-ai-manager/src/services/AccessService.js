@@ -122,7 +122,14 @@ class AccessService {
 
   static async bootstrapOwnerSession(userId) {
     if (String(OWNER_TELEGRAM_ID) !== String(userId)) return false;
-    await this._createSession(String(userId), 'owner', null, OWNER_SESSION_TTL_MS);
+    const id = String(userId);
+    if (this.isOwnerSync(id) && this._cache.has(id)) return true;
+    try {
+      await this._createSession(id, 'owner', null, OWNER_SESSION_TTL_MS);
+    } catch (err) {
+      if (!/duplicate key|23505/i.test(err.message)) throw err;
+      await this.reloadCache();
+    }
     return true;
   }
 
@@ -297,7 +304,13 @@ class AccessService {
         expires_at: session.expiresAt,
         last_seen_at: session.lastSeenAt
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        if (error.code === '23505' || /duplicate key/i.test(error.message)) {
+          await this.reloadCache();
+          return;
+        }
+        throw new Error(error.message);
+      }
     } else {
       const payload = await this._readAccessPayload();
       payload.sessions = payload.sessions || [];

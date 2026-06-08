@@ -119,7 +119,16 @@ class BotService {
       polling: { interval: 300, autoStart: true, params: { timeout: 10 } }
     });
 
-    this.bot.on('polling_error', (err) => console.error('polling_error', err));
+    this.bot.on('polling_error', (err) => {
+      const code = err?.response?.body?.error_code || err?.code;
+      const desc = err?.response?.body?.description || err?.message || String(err);
+      console.error('polling_error', desc);
+      if (code === 409 || /409|Conflict|getUpdates/i.test(desc)) {
+        console.error(
+          '[BotService] Конфликт токена: бот уже запущен в другом месте. Остановите локальный npm start или второй деплой.'
+        );
+      }
+    });
     this.bot.on('webhook_error', (err) => console.error('webhook_error', err));
 
     this.postService = new PostService(this.bot);
@@ -449,17 +458,35 @@ class BotService {
     return msg;
   }
 
+  _guardHandler(name, handler) {
+    return (...args) =>
+      Promise.resolve(handler.apply(this, args)).catch(async (err) => {
+        console.error(`[BotService] ${name}:`, err);
+        const target = args[0];
+        const chatId = target?.chat?.id || target?.from?.id;
+        if (!chatId) return;
+        try {
+          await this.sendMessage(chatId, '❌ Внутренняя ошибка. Отправьте /start ещё раз.', { noNav: true });
+        } catch {
+          /* ignore */
+        }
+      });
+  }
+
   initHandlers() {
-    this.bot.onText(/\/start/, (msg) => this.handleStart(msg));
-    this.bot.onText(/\/pinchannel/, (msg) => this.handlePinChannel(msg));
-    this.bot.onText(/\/stats/, (msg) => this.handleStats(msg));
-    this.bot.onText(/\/settings/, (msg) => this.handleSettings(msg));
-    this.bot.onText(/\/admin/, (msg) => this.handleAdmin(msg));
-    this.bot.onText(/\/panel/, (msg) => this.handleAdmin(msg));
-    this.bot.on('callback_query', (query) => this.handleCallback(query));
-    this.bot.on('message', (msg) => this.handleMessage(msg));
-    this.bot.on('channel_post', (msg) => this.handleChannelPost(msg));
-    this.bot.on('edited_channel_post', (msg) => this.handleEditedChannelPost(msg));
+    this.bot.onText(/\/start/, this._guardHandler('handleStart', this.handleStart));
+    this.bot.onText(/\/pinchannel/, this._guardHandler('handlePinChannel', this.handlePinChannel));
+    this.bot.onText(/\/stats/, this._guardHandler('handleStats', this.handleStats));
+    this.bot.onText(/\/settings/, this._guardHandler('handleSettings', this.handleSettings));
+    this.bot.onText(/\/admin/, this._guardHandler('handleAdmin', this.handleAdmin));
+    this.bot.onText(/\/panel/, this._guardHandler('handleAdmin', this.handleAdmin));
+    this.bot.on('callback_query', this._guardHandler('handleCallback', this.handleCallback));
+    this.bot.on('message', this._guardHandler('handleMessage', this.handleMessage));
+    this.bot.on('channel_post', this._guardHandler('handleChannelPost', this.handleChannelPost));
+    this.bot.on(
+      'edited_channel_post',
+      this._guardHandler('handleEditedChannelPost', this.handleEditedChannelPost)
+    );
   }
 
   async handleAdmin(msg) {
