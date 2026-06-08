@@ -1,13 +1,22 @@
 const { createClient } = require('@supabase/supabase-js');
 const { COLLECTIONS } = require('./collections');
 
+function supabaseClientOptions() {
+  const options = {
+    auth: { persistSession: false, autoRefreshToken: false }
+  };
+  const nodeMajor = Number(process.versions.node.split('.')[0]);
+  if (nodeMajor < 22) {
+    options.realtime = { transport: require('ws') };
+  }
+  return options;
+}
+
 class SupabaseBackend {
   constructor(url, serviceKey) {
     this.name = 'supabase';
     this.url = url;
-    this.client = createClient(url, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
+    this.client = createClient(url, serviceKey, supabaseClientOptions());
   }
 
   async healthCheck() {

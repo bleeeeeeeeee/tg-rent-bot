@@ -21,6 +21,25 @@ process.on('unhandledRejection', (err) => console.error('unhandledRejection', er
     console.log(`   CHANNEL_ID: ${CHANNEL_ID}`);
     console.log(`   STORAGE_BACKEND: ${STORAGE_BACKEND}`);
 
+    if (!BOT_TOKEN?.trim()) {
+      console.error('\n❌ BOT_TOKEN не задан.');
+      console.error('   На Northflank: сервис → Variables → Runtime → добавьте BOT_TOKEN и остальные переменные.');
+      console.error('   Файл .env в Docker не используется — только переменные окружения платформы.\n');
+      process.exit(1);
+    }
+    if (!String(OWNER_TELEGRAM_ID || ADMIN_ID).trim()) {
+      console.error('\n❌ OWNER_TELEGRAM_ID (или ADMIN_ID) не задан.\n');
+      process.exit(1);
+    }
+    if (!CHANNEL_ID?.trim()) {
+      console.error('\n❌ CHANNEL_ID не задан (например @voidpreshade).\n');
+      process.exit(1);
+    }
+    if (STORAGE_BACKEND === 'supabase' && (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY)) {
+      console.error('\n❌ STORAGE_BACKEND=supabase, но нет SUPABASE_URL или SUPABASE_SERVICE_KEY.\n');
+      process.exit(1);
+    }
+
     await ExistingPosts.migrateSchema();
     await SecretsService.seedFromEnv();
     await AccessService.init();
