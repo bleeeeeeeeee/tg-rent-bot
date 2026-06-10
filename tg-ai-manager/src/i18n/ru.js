@@ -158,5 +158,28 @@ module.exports = {
 
   'common.back': 'Назад',
   'common.main_menu': 'Главное меню',
-  'common.loading': 'Подождите…'
+  'common.loading': 'Подождите…',
+
+  'publish.ready': 'Отправить готовый пост',
+  'publish.ai': 'Написать с ИИ',
+  'publish.topics': 'Темы для постов',
+  'publish.choose': 'Как опубликовать?',
+
+  'topics.no_ai': 'ИИ не настроен. Подключите сервис в <b>Настройки → ИИ для постов</b>.',
+  'topics.mode_prompt': '💡 <b>Генератор тем</b>\n\nВыберите тип идей:',
+  'topics.mode.unique': 'Новые (уникальные)',
+  'topics.mode.similar': 'В стиле канала',
+  'topics.mode.similar_ref': 'Похожие на пост…',
+  'topics.count_prompt': 'Сколько тем сгенерировать?',
+  'topics.generating': '⏳ Генерирую темы…',
+  'topics.result_unique': '🆕 <b>Уникальные темы</b> ({count}):',
+  'topics.result_similar': '🔁 <b>Темы в стиле канала</b> ({count}):',
+  'topics.error': '❌ {error}',
+  'topics.no_posts': 'В архиве пока нет постов для ориентира. Выберите «В стиле канала».',
+  'topics.ref_prompt': 'Выберите пост-ориентир:',
+  'topics.back_modes': '← К типам тем',
+  'topics.regenerate': 'Ещё раз',
+  'topics.action.wizard': 'Написать пост с ИИ',
+  'topics.action.draft': 'Сохранить в черновики',
+  'topics.saved_draft': 'Тема «{title}» сохранена в черновики.'
 };

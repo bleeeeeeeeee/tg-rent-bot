@@ -134,6 +134,13 @@ node -e "require('dotenv').config(); console.log(process.env.TG_SESSION ? 'TG_SE
 | `/stats` | Статистика архива |
 | `/pinchannel` | Закрепить ссылку на канал |
 
+**Публикация → Темы для постов** — ИИ предлагает идеи:
+- **Новые (уникальные)** — темы, которых ещё не было в канале
+- **В стиле канала** — похожие на прошлые публикации
+- **Похожие на пост…** — выбрать конкретный пост как ориентир
+
+Выбранную тему можно сразу передать в мастер «Написать с ИИ» или сохранить в черновики.
+
 Подробнее — **Настройки → Инструкция** в боте.
 
 Ключи нейросетей (OpenRouter, Gemini, Groq и др.) задаются **в боте**, не обязательно в `.env`.
@@ -248,6 +255,29 @@ docker compose up -d --build
 ```
 
 Volume `storage/` — для локального backup; при `STORAGE_BACKEND=supabase` основные данные в Postgres.
+
+### Northflank / облачный PaaS
+
+1. Build context: `tg-ai-manager`, Dockerfile: `tg-ai-manager/Dockerfile`
+2. **Runtime Variables** (не Build — `.env` в образ не попадает):
+
+```env
+BOT_TOKEN=...
+OWNER_TELEGRAM_ID=...
+CHANNEL_ID=@channel
+STORAGE_BACKEND=supabase
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_KEY=sb_secret_...
+TIMEZONE=Europe/Moscow
+INSTANCE_ID=northflank-1
+HEALTH_PORT=8080
+```
+
+3. Health check: `GET /health` на порту 8080 (отключить: `HEALTH_PORT=0`)
+4. Node 22 в Docker (нативный WebSocket для Supabase)
+5. **Один** инстанс на один `BOT_TOKEN` — не запускайте `npm start` на Mac одновременно
+
+**Ollama на Mac + бот в облаке:** нужен ngrok и `OLLAMA_ORIGINS=*`. Для 24/7 лучше OpenRouter/Groq.
 
 **Резервное копирование (cron):**
 

@@ -16,6 +16,7 @@ const AccessService = require('./AccessService');
 const SyncService = require('./SyncService');
 const StorageRegistry = require('../storage/StorageRegistry');
 const AdminHandlers = require('./AdminHandlers');
+const TopicHandlers = require('../handlers/TopicHandlers');
 const AdminPanelService = require('./AdminPanelService');
 const { t } = require('../i18n');
 const ChatCleanupService = require('./ChatCleanupService');
@@ -110,7 +111,11 @@ const WORKFLOW_MODES = new Set([
   'waiting_custom_ai_edit_label',
   'waiting_custom_ai_edit_url',
   'waiting_custom_ai_edit_key',
-  'waiting_custom_ai_edit_model'
+  'waiting_custom_ai_edit_model',
+  'topic_choose_count',
+  'topic_generating',
+  'topic_review',
+  'topic_pick_reference'
 ]);
 
 class BotService {
@@ -134,6 +139,7 @@ class BotService {
     this.postService = new PostService(this.bot);
     this.postRepository = postRepository;
     this.adminHandlers = new AdminHandlers(this);
+    this.topicHandlers = new TopicHandlers(this);
 
     initChannelUrl(this.bot).catch(console.error);
 
@@ -626,7 +632,8 @@ class BotService {
 
     if (data === 'menu_publish') {
       if (!(await this.requireGuestAllowed(userId))) return;
-      return this.sendMessage(userId, 'Как опубликовать?', await MenuService.getPublishModeMenu());
+      const loc = await this.locale(userId);
+      return this.sendMessage(userId, t('publish.choose', null, loc), await MenuService.getPublishModeMenu(null, loc));
     }
 
     if (data === 'publish_mode_ready') {
@@ -636,6 +643,11 @@ class BotService {
 
     if (data === 'publish_mode_ai') {
       return this.startAiWizard(userId);
+    }
+
+    if (data === 'publish_mode_topics' || data.startsWith('topic_')) {
+      const handled = await this.topicHandlers.handleCallback(userId, data);
+      if (handled !== null && handled !== undefined) return handled;
     }
 
     if (data.startsWith('wizard_')) {
@@ -763,6 +775,27 @@ class BotService {
         `✨ <b>${draft.label || 'Мастер ИИ'}</b>\n\nПродолжить с сохранённого шага?`,
         { parse_mode: 'HTML', ...MenuService.getWizardDraftActionMenu(draft.id, await UiStyleService.get()) }
       );
+    }
+
+    const topicSelectMatch = data.match(/^draft_topic_(.+)$/);
+    if (topicSelectMatch) {
+      const draft = await DraftService.getById(userId, topicSelectMatch[1]);
+      if (!draft || draft.kind !== 'topic' || !draft.topic) {
+        return this.sendMessage(userId, 'Черновик темы не найден.', await MenuService.getMainMenu());
+      }
+      const topic = draft.topic;
+      const text =
+        `<b>${topic.title}</b>\n${topic.brief}` +
+        (topic.angle ? `\n\n💡 ${topic.angle}` : '') +
+        (topic.tags?.length ? `\n\n🏷 ${topic.tags.join(', ')}` : '');
+      stateManager.set(userId, {
+        mode: 'topic_review',
+        topics: { items: [topic], selectedIndex: 0, draftId: draft.id }
+      });
+      return this.sendMessage(userId, text, {
+        parse_mode: 'HTML',
+        ...(await MenuService.getTopicActionMenu(0, await UiStyleService.get(), await this.locale(userId)))
+      });
     }
 
     if (data === 'draft_cancel') {

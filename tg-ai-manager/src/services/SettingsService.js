@@ -37,6 +37,9 @@ const DEFAULT_SETTINGS = {
     guest: {
       draftsEdit: false
     }
+  },
+  topics: {
+    history: []
   }
 };
 
@@ -293,6 +296,19 @@ class SettingsService {
 
   static invalidateCache() {
     /* hook for Realtime; settings read fresh each time */
+  }
+
+  static async getTopicHistory() {
+    const s = await this._read();
+    return Array.isArray(s.topics?.history) ? s.topics.history : [];
+  }
+
+  static async setTopicHistory(history) {
+    const s = await this._read();
+    s.topics = s.topics || {};
+    s.topics.history = history;
+    await this._write(s);
+    return s.topics.history;
   }
 }
 

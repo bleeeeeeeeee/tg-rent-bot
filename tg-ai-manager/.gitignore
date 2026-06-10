@@ -1,3 +1,9 @@
 node_modules/
 .env
+.env.*
+!.env.example
 storage/*.json
+storage/backups/
+.cursor/
+*.log
+.DS_Store

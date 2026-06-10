@@ -103,8 +103,10 @@ class SupabaseBackend {
 
   async _writePosts(doc) {
     const posts = doc?.posts || [];
-    await this.client.from('channel_posts').delete().neq('id', 0);
-    if (!posts.length) return;
+    if (!posts.length) {
+      await this.client.from('channel_posts').delete().neq('id', 0);
+      return;
+    }
     const rows = posts.map((p) => ({
       id: Number(p.id),
       payload: p,

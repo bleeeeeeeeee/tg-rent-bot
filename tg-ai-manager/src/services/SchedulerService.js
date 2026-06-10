@@ -12,32 +12,40 @@ class SchedulerService {
   }
 
   start() {
-    setInterval(async () => {
-      const posts = await this.postRepository.getDueScheduled();
-
-      for (const post of posts) {
-        if (new Date(post.publishAt) <= new Date()) {
-          try {
-            const result = await this.publishService.publish(
-              post.userId,
-              post.chatId,
-              post.messageId
-            );
-            await ChatCleanupService.releasePinnedMessage(this.bot, post.userId, post.messageId);
-            this.notifyAdmin(result).catch(console.error);
-            await this.postRepository.markAsPublished(post.id);
-          } catch (err) {
-            console.error('[SchedulerService] publish failed:', err.message);
-            const reason = PostService.formatPublishError(err);
-            if (PostService.isSourceMissing(err)) {
+    if (this._timer) return;
+    this._running = false;
+    this._timer = setInterval(async () => {
+      if (this._running) return;
+      this._running = true;
+      try {
+        const posts = await this.postRepository.getDueScheduled();
+        for (const post of posts) {
+          if (new Date(post.publishAt) <= new Date()) {
+            try {
+              const result = await this.publishService.publish(
+                post.userId,
+                post.chatId,
+                post.messageId
+              );
               await ChatCleanupService.releasePinnedMessage(this.bot, post.userId, post.messageId);
+              this.notifyAdmin(result).catch(console.error);
+              await this.postRepository.markAsPublished(post.id);
+            } catch (err) {
+              console.error('[SchedulerService] publish failed:', err.message);
+              const reason = PostService.formatPublishError(err);
+              if (PostService.isSourceMissing(err)) {
+                await ChatCleanupService.releasePinnedMessage(this.bot, post.userId, post.messageId);
+              }
+              await this.postRepository.markAsFailed(post.id, reason);
+              this.notifyAdminError(reason).catch(console.error);
             }
-            await this.postRepository.markAsFailed(post.id, reason);
-            this.notifyAdminError(reason).catch(console.error);
           }
         }
+      } finally {
+        this._running = false;
       }
     }, 30000);
+    if (this._timer.unref) this._timer.unref();
   }
 
   async notifyAdmin(channelMessage) {

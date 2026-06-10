@@ -47,6 +47,10 @@ class WritingService {
     return Boolean(await this._resolveAiForWriting());
   }
 
+  static async resolveAi() {
+    return this._resolveAiForWriting();
+  }
+
   static emptyWizard() {
     return {
       title: '',

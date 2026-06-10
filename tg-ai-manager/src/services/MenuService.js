@@ -48,15 +48,77 @@ class MenuService {
         };
     }
 
-    static async getPublishModeMenu(ui = null) {
+    static async getPublishModeMenu(ui = null, locale = null) {
         ui = await this._ui(ui);
+        const loc = locale || await this._loc();
         const UiStyleService = require('./UiStyleService');
         return {
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: this._L(ui, '📤', 'Отправить готовый пост'), callback_data: 'publish_mode_ready' }],
-                    [{ text: this._L(ui, '✨', 'Написать с ИИ'), callback_data: 'publish_mode_ai' }],
+                    [{ text: this._L(ui, '📤', this._t('publish.ready', loc)), callback_data: 'publish_mode_ready' }],
+                    [{ text: this._L(ui, '✨', this._t('publish.ai', loc)), callback_data: 'publish_mode_ai' }],
+                    [{ text: this._L(ui, '💡', this._t('publish.topics', loc)), callback_data: 'publish_mode_topics' }],
                     [{ text: UiStyleService.backLabel(ui), callback_data: 'cancel' }]
+                ]
+            }
+        };
+    }
+
+    static getTopicModeMenu(ui = null, locale = 'ru') {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const _t = (k, p) => require('../i18n').t(k, p, locale);
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: this._L(style, '🆕', _t('topics.mode.unique')), callback_data: 'topic_mode_unique' }],
+                    [{ text: this._L(style, '🔁', _t('topics.mode.similar')), callback_data: 'topic_mode_similar' }],
+                    [{ text: this._L(style, '📎', _t('topics.mode.similar_ref')), callback_data: 'topic_mode_similar_ref' }],
+                    [{ text: UiStyleService.backLabel(style), callback_data: 'menu_publish' }]
+                ]
+            }
+        };
+    }
+
+    static getTopicCountMenu(ui = null, locale = 'ru') {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: '3', callback_data: 'topic_count_3' },
+                        { text: '5', callback_data: 'topic_count_5' },
+                        { text: '8', callback_data: 'topic_count_8' }
+                    ],
+                    [{ text: UiStyleService.backLabel(style), callback_data: 'publish_mode_topics' }]
+                ]
+            }
+        };
+    }
+
+    static getTopicResultsMenu(topics, ui = null, locale = 'ru') {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const _t = (k, p) => require('../i18n').t(k, p, locale);
+        const rows = topics.map((t, i) => [
+            { text: `${i + 1}. ${String(t.title).slice(0, 40)}`, callback_data: `topic_pick_${i}` }
+        ]);
+        rows.push([{ text: this._L(style, '🔄', _t('topics.regenerate')), callback_data: 'topic_regenerate' }]);
+        rows.push([{ text: UiStyleService.backLabel(style), callback_data: 'menu_publish' }]);
+        return { reply_markup: { inline_keyboard: rows } };
+    }
+
+    static getTopicActionMenu(index, ui = null, locale = 'ru') {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const _t = (k, p) => require('../i18n').t(k, p, locale);
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: this._L(style, '✨', _t('topics.action.wizard')), callback_data: `topic_use_wizard_${index}` }],
+                    [{ text: this._L(style, '💾', _t('topics.action.draft')), callback_data: `topic_save_draft_${index}` }],
+                    [{ text: UiStyleService.backLabel(style), callback_data: 'publish_mode_topics' }]
                 ]
             }
         };
@@ -324,6 +386,10 @@ class MenuService {
             if (d.kind === 'wizard') {
                 const label = d.label?.length > 28 ? `${d.label.slice(0, 28)}…` : d.label;
                 return [{ text: this._L(style, '✨', `Мастер: ${label || 'без названия'}`), callback_data: `draft_wizard_${d.id}` }];
+            }
+            if (d.kind === 'topic') {
+                const label = d.label?.length > 28 ? `${d.label.slice(0, 28)}…` : d.label;
+                return [{ text: this._L(style, '💡', `Тема: ${label || 'без названия'}`), callback_data: `draft_topic_${d.id}` }];
             }
             return [{ text: this._L(style, '✏️', 'Пост'), callback_data: `draft_select_${d.id}` }];
         });

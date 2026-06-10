@@ -47,6 +47,26 @@ class DraftService {
     return draft;
   }
 
+  async addTopicNote(userId, topic) {
+    const data = await this._read();
+    const draft = {
+      id: uuidv4(),
+      kind: 'topic',
+      userId: String(userId),
+      label: topic.title?.slice(0, 60) || 'Тема',
+      topic: {
+        title: topic.title,
+        brief: topic.brief,
+        angle: topic.angle || '',
+        tags: topic.tags || []
+      },
+      createdAt: new Date().toISOString()
+    };
+    data.drafts.push(draft);
+    await this._write(data);
+    return draft;
+  }
+
   async getAll(userId) {
     const data = await this._read();
     return data.drafts.filter((d) => d.userId === String(userId));

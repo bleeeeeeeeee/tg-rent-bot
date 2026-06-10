@@ -120,6 +120,16 @@ class SettingsUIService {
     if (/timeout|ETIMEDOUT|ECONNRESET|timed out/i.test(msg)) {
       return loc === 'en' ? '⏳ <b>No response.</b> Check network.' : '⏳ <b>Нет ответа от сервиса.</b>';
     }
+    if (/connection error|ECONNREFUSED|ENOTFOUND|fetch failed|unable to connect|network/i.test(msg)) {
+      return loc === 'en'
+        ? '❌ <b>Cannot reach server.</b> If this is Ollama on your Mac and the bot runs in the cloud, use a tunnel (ngrok) instead of 127.0.0.1.'
+        : '❌ <b>Не удалось подключиться к серверу.</b>\n\n' +
+            'Если это <b>Ollama на Mac</b>, а бот на Northflank — адрес <code>127.0.0.1</code> не сработает (это localhost сервера в облаке, не ваш Mac).\n\n' +
+            'Варианты:\n' +
+            '• Запустить бота локально на Mac (<code>npm start</code>), Northflank выключить\n' +
+            '• Или пробросить Ollama через ngrok и указать его URL\n' +
+            '• Или использовать облачный AI (OpenRouter, Groq)';
+    }
     return `❌ ${SettingsUIService._escapeHtml(msg)}`;
   }
 

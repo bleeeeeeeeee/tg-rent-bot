@@ -27,11 +27,20 @@ module.exports = {
     return url;
   },
 
+  _extraHeaders(secrets) {
+    const raw = (secrets?.baseUrl || '').toLowerCase();
+    if (raw.includes('ngrok')) {
+      return { 'ngrok-skip-browser-warning': '1' };
+    }
+    return undefined;
+  },
+
   async validateConfig(secrets, model) {
     return validateOpenAICompatible({
       baseURL: this._baseUrl(secrets),
       apiKey: 'ollama',
-      model: model || this.defaultModel
+      model: model || this.defaultModel,
+      extraHeaders: this._extraHeaders(secrets)
     });
   },
 
@@ -40,7 +49,8 @@ module.exports = {
       baseURL: this._baseUrl(secrets),
       apiKey: 'ollama',
       model: model || this.defaultModel,
-      text
+      text,
+      extraHeaders: this._extraHeaders(secrets)
     });
   },
 
@@ -51,7 +61,8 @@ module.exports = {
       apiKey: 'ollama',
       model: model || this.defaultModel,
       userPrompt,
-      systemPrompt
+      systemPrompt,
+      extraHeaders: this._extraHeaders(secrets)
     });
   }
 };

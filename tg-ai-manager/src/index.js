@@ -3,14 +3,34 @@ const PostRepository = require('./services/PostRepository');
 const SchedulerService = require('./services/SchedulerService');
 const AccessService = require('./services/AccessService');
 const SyncService = require('./services/SyncService');
+const { startHealthServer, stopHealthServer } = require('./health');
 const { CHANNEL_ID, ADMIN_ID, OWNER_TELEGRAM_ID, BOT_TOKEN, STORAGE_BACKEND } = require('./config');
 const ExistingPosts = require('./services/ExistingPosts');
 const SecretsService = require('./services/SecretsService');
 const SettingsService = require('./services/SettingsService');
 const AiProviderRegistry = require('./ai/AiProviderRegistry');
 
+let botService = null;
+let scheduler = null;
+
 process.on('uncaughtException', (err) => console.error('uncaughtException', err));
 process.on('unhandledRejection', (err) => console.error('unhandledRejection', err));
+
+async function shutdown(signal) {
+  console.log(`\n⏹ ${signal} — останавливаю бота…`);
+  try {
+    if (botService?.bot) {
+      await botService.bot.stopPolling();
+    }
+    await stopHealthServer();
+  } catch (err) {
+    console.error('Shutdown error:', err.message);
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 (async () => {
   try {
@@ -46,6 +66,10 @@ process.on('unhandledRejection', (err) => console.error('unhandledRejection', er
     await AiProviderRegistry.refreshCustom();
     await SyncService.init();
 
+    if (process.env.HEALTH_PORT !== '0') {
+      startHealthServer();
+    }
+
     const settings = await SettingsService.getAll();
     const activeAi = await SettingsService.getActiveProvider();
     console.log(`   AI provider: ${activeAi || 'not set'}`);
@@ -56,9 +80,9 @@ process.on('unhandledRejection', (err) => console.error('unhandledRejection', er
     console.log(`\n📊 Posts in DB: ${postCount} (${pendingCount} scheduled)`);
     console.log('\nMode: channel monitoring enabled 🔄\n');
 
-    const botService = new BotService(PostRepository);
+    botService = new BotService(PostRepository);
     console.log('✅ Telegram polling active\n');
-    const scheduler = new SchedulerService(botService.bot, PostRepository, botService.postService);
+    scheduler = new SchedulerService(botService.bot, PostRepository, botService.postService);
     scheduler.start();
   } catch (err) {
     console.error('❌ Ошибка при запуске:', err.message);

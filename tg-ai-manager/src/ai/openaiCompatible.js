@@ -91,9 +91,42 @@ async function validateOpenAICompatible(opts) {
   return pingOpenAICompatible(opts);
 }
 
+async function completeRawOpenAICompatible({
+  baseURL,
+  apiKey,
+  model,
+  userPrompt,
+  systemPrompt,
+  extraHeaders,
+  temperature = 0.85
+}) {
+  const client = createClient({ baseURL, apiKey, extraHeaders, maxRetries: 1, timeout: 90000 });
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: truncateText(userPrompt, 8000) }
+  ];
+  try {
+    const response = await client.chat.completions.create({
+      model,
+      messages,
+      response_format: { type: 'json_object' },
+      temperature
+    });
+    return response.choices[0]?.message?.content || '';
+  } catch {
+    const response = await client.chat.completions.create({
+      model,
+      messages,
+      temperature
+    });
+    return response.choices[0]?.message?.content || '';
+  }
+}
+
 module.exports = {
   pingOpenAICompatible,
   summarizeWithOpenAICompatible,
   generateWithOpenAICompatible,
-  validateOpenAICompatible
+  validateOpenAICompatible,
+  completeRawOpenAICompatible
 };

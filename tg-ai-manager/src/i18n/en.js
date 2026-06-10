@@ -158,5 +158,28 @@ module.exports = {
 
   'common.back': 'Back',
   'common.main_menu': 'Main menu',
-  'common.loading': 'Please wait…'
+  'common.loading': 'Please wait…',
+
+  'publish.ready': 'Send ready post',
+  'publish.ai': 'Write with AI',
+  'publish.topics': 'Topic ideas',
+  'publish.choose': 'How to publish?',
+
+  'topics.no_ai': 'AI not configured. Go to <b>Settings → AI for posts</b>.',
+  'topics.mode_prompt': '💡 <b>Topic generator</b>\n\nChoose idea type:',
+  'topics.mode.unique': 'New (unique)',
+  'topics.mode.similar': 'Channel style',
+  'topics.mode.similar_ref': 'Similar to post…',
+  'topics.count_prompt': 'How many topics to generate?',
+  'topics.generating': '⏳ Generating topics…',
+  'topics.result_unique': '🆕 <b>Unique topics</b> ({count}):',
+  'topics.result_similar': '🔁 <b>Topics in channel style</b> ({count}):',
+  'topics.error': '❌ {error}',
+  'topics.no_posts': 'No posts in archive yet. Try «Channel style» instead.',
+  'topics.ref_prompt': 'Pick a reference post:',
+  'topics.back_modes': '← Topic types',
+  'topics.regenerate': 'Generate again',
+  'topics.action.wizard': 'Write post with AI',
+  'topics.action.draft': 'Save to drafts',
+  'topics.saved_draft': 'Topic «{title}» saved to drafts.'
 };
