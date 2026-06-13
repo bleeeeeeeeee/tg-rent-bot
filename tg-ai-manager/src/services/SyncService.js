@@ -38,7 +38,15 @@ class SyncService {
       return null;
     }
 
-    const targetMode = cloud?.mode || STORAGE_BACKEND || 'file';
+    const envMode = require('../config').STORAGE_BACKEND || 'file';
+    const persistedMode = cloud?.mode || 'file';
+    const targetMode =
+      process.env.NODE_ENV === 'production'
+        ? envMode || 'supabase'
+        : persistedMode !== 'file'
+          ? persistedMode
+          : envMode;
+
     const current = StorageRegistry.getBackend().name;
 
     if (targetMode !== current && targetMode !== 'file') {
@@ -403,6 +411,8 @@ class SyncService {
 
     const tables = [
       'app_settings',
+      'app_secrets',
+      'user_settings',
       'channel_posts',
       'drafts',
       'scheduled_posts',
@@ -410,15 +420,9 @@ class SyncService {
       'sync_meta'
     ];
 
-    this._realtimeChannel = client
-      .channel(`tg-ai-manager-${INSTANCE_ID}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'app_settings' },
-        (payload) => this._onRealtimeEvent('app_settings', payload)
-      );
+    this._realtimeChannel = client.channel(`tg-ai-manager-${INSTANCE_ID}`);
 
-    for (const table of tables.slice(1)) {
+    for (const table of tables) {
       this._realtimeChannel = this._realtimeChannel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table },
@@ -439,6 +443,14 @@ class SyncService {
     console.log(`[SyncService] Realtime ${payload.eventType} on ${table}`);
     if (table === 'app_settings') {
       SettingsService.invalidateCache?.();
+    }
+    if (table === 'app_secrets') {
+      const SecretsService = require('./SecretsService');
+      SecretsService.invalidateCache?.();
+    }
+    if (table === 'user_settings') {
+      const UserSettingsService = require('./UserSettingsService');
+      UserSettingsService.invalidateCache?.();
     }
   }
 

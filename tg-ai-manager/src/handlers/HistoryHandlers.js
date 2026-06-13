@@ -47,7 +47,7 @@ class HistoryHandlers {
       page = 0;
     } else if (data === 'history_filters') {
       filter = state?.historyFilter || 'published';
-      const ui = await UiStyleService.get();
+      const ui = await UiStyleService.get(userId);
       return this.bs.sendMessage(
         userId,
         `<b>${t('history.filter.menu', null, loc)}</b>`,
@@ -166,7 +166,7 @@ class HistoryHandlers {
       return this.bs.sendMessage(
         userId,
         t('history.scheduled.pick_date', null, loc),
-        MenuService.getCalendar(today.getFullYear(), today.getMonth(), await UiStyleService.get())
+        MenuService.getCalendar(today.getFullYear(), today.getMonth(), await UiStyleService.get(userId))
       );
     }
 
@@ -233,7 +233,7 @@ class HistoryHandlers {
 
   async showDeleteConfirm(userId, postId, state) {
     const loc = await this.bs.locale(userId);
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     stateManager.set(userId, this._historyState(state, state?.historyFilter, state?.historyPage));
     return this.bs.sendMessage(
       userId,
@@ -264,11 +264,11 @@ class HistoryHandlers {
     if (!item) {
       return this.bs.sendMessage(userId, t('history.post.not_found', null, loc), await MenuService.getMainMenu());
     }
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     stateManager.set(userId, this._historyState(state, state?.historyFilter, state?.historyPage));
     return this.bs.sendMessage(
       userId,
-      await HistoryService.formatEditHistoryCard(item, {}, loc),
+      await HistoryService.formatEditHistoryCard(item, {}, loc, userId),
       {
         parse_mode: 'HTML',
         ...MenuService.getEditHistoryMenu(postId, ui, loc)
@@ -319,8 +319,8 @@ class HistoryHandlers {
   }
 
   async showHistoryList(userId, filter, page, { tryAutoSync = true, preamble = null } = {}) {
-    const ui = await UiStyleService.get();
-    let result = await HistoryService.list({ filter, page });
+    const ui = await UiStyleService.get(userId);
+    let result = await HistoryService.list({ filter, page, userId });
 
     if (tryAutoSync && result.total === 0 && filter === 'published' && ChannelSyncService.canSync()) {
       await this.runChannelSync(userId, filter, page, { silent: true });
@@ -361,9 +361,9 @@ class HistoryHandlers {
     if (!item) {
       return this.bs.sendMessage(userId, t('history.post.not_found', null, loc), await MenuService.getMainMenu());
     }
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     stateManager.set(userId, this._historyState(state, state?.historyFilter, state?.historyPage));
-    return this.bs.sendMessage(userId, await HistoryService.formatPublishedCard(item, loc), {
+    return this.bs.sendMessage(userId, await HistoryService.formatPublishedCard(item, loc, userId), {
       parse_mode: 'HTML',
       ...MenuService.getPublishedCardMenu(item, item.replyContext, ui, loc)
     });
@@ -375,9 +375,9 @@ class HistoryHandlers {
     if (!item) {
       return this.bs.sendMessage(userId, t('history.scheduled.not_found', null, loc), await MenuService.getMainMenu());
     }
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     stateManager.set(userId, this._historyState(state, state?.historyFilter, state?.historyPage));
-    return this.bs.sendMessage(userId, await HistoryService.formatScheduledCard(item), {
+    return this.bs.sendMessage(userId, await HistoryService.formatScheduledCard(item, userId), {
       parse_mode: 'HTML',
       ...MenuService.getScheduledCardMenu(item.refId, ui)
     });

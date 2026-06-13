@@ -1,5 +1,6 @@
 const AiProviderRegistry = require('../ai/AiProviderRegistry');
 const SettingsService = require('./SettingsService');
+const UserSettingsService = require('./UserSettingsService');
 const SecretsService = require('./SecretsService');
 const { t } = require('../i18n');
 
@@ -11,7 +12,8 @@ class SettingsUIService {
       .replace(/>/g, '&gt;');
   }
 
-  static async _loc() {
+  static async _loc(userId = null) {
+    if (userId) return UserSettingsService.getLocale(userId);
     return SettingsService.getLocale();
   }
 
@@ -20,11 +22,15 @@ class SettingsUIService {
     return t(val ? 'settings.on' : 'settings.off', null, loc);
   }
 
-  static async formatSettingsRoot() {
-    const loc = await this._loc();
-    const tz = await SettingsService.getTimezone();
+  static async formatSettingsRoot(userId = null) {
+    const loc = await this._loc(userId);
+    const tz = userId
+      ? await UserSettingsService.getTimezone(userId)
+      : await SettingsService.getTimezone();
     const autoEnrich = await SettingsService.getAutoEnrich();
-    const chatCleanup = await SettingsService.getChatCleanup();
+    const chatCleanup = userId
+      ? await UserSettingsService.getChatCleanup(userId)
+      : await SettingsService.getChatCleanup();
     const active = await SettingsService.getActiveProvider();
     let aiLine = t('settings.root.ai_none', null, loc);
 
@@ -45,8 +51,8 @@ class SettingsUIService {
     );
   }
 
-  static async formatAiScreen() {
-    const loc = await this._loc();
+  static async formatAiScreen(userId = null) {
+    const loc = await this._loc(userId);
     const active = await SettingsService.getActiveProvider();
     const autoEnrich = await SettingsService.getAutoEnrich();
     const configured = [];
@@ -73,8 +79,8 @@ class SettingsUIService {
     return lines.join('\n');
   }
 
-  static async formatAppearanceScreen(ui) {
-    const loc = await this._loc();
+  static async formatAppearanceScreen(ui, userId = null) {
+    const loc = await this._loc(userId);
     const useEmojis = ui?.useEmojis !== false;
     const navStyle = ui?.navStyle === 'arrows' ? 'arrows' : 'text';
     const navExample =
@@ -87,10 +93,14 @@ class SettingsUIService {
     );
   }
 
-  static async formatGeneralScreen() {
-    const loc = await this._loc();
-    const tz = await SettingsService.getTimezone();
-    const chatCleanup = await SettingsService.getChatCleanup();
+  static async formatGeneralScreen(userId = null) {
+    const loc = await this._loc(userId);
+    const tz = userId
+      ? await UserSettingsService.getTimezone(userId)
+      : await SettingsService.getTimezone();
+    const chatCleanup = userId
+      ? await UserSettingsService.getChatCleanup(userId)
+      : await SettingsService.getChatCleanup();
     return (
       `🌍 <b>${t('settings.general.title', null, loc)}</b>\n\n` +
       `${t('settings.general.cleanup', { state: this._onOff(chatCleanup, loc, true) }, loc)}\n` +

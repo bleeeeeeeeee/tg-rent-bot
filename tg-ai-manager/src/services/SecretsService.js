@@ -65,6 +65,10 @@ class SecretsService {
     return ids.filter((id) => checkFn(data.providers[id]));
   }
 
+  static invalidateCache() {
+    /* Realtime hook; secrets read fresh each time */
+  }
+
   static async seedFromEnv() {
     if (!OPENAI_API_KEY) return false;
     const existing = await this.getProviderSecret('openai');

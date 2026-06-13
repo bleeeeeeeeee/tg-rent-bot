@@ -3,6 +3,7 @@ const AdminPanelService = require('./AdminPanelService');
 const AdminUIService = require('./AdminUIService');
 const SyncService = require('./SyncService');
 const SettingsService = require('./SettingsService');
+const UserSettingsService = require('./UserSettingsService');
 const SecretsService = require('./SecretsService');
 const StorageRegistry = require('../storage/StorageRegistry');
 const ChannelSyncService = require('./ChannelSyncService');
@@ -22,7 +23,7 @@ class AdminHandlers {
   }
 
   async locale(userId) {
-    return SettingsService.getLocale();
+    return UserSettingsService.getLocale(userId);
   }
 
   async requireSession(userId) {
@@ -54,7 +55,7 @@ class AdminHandlers {
 
   async showHub(userId, sendOpts = {}) {
     const loc = await this.locale(userId);
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     const text = await AdminUIService.formatHub();
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
@@ -67,7 +68,7 @@ class AdminHandlers {
     const text = await AdminUIService.formatAccessScreen();
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
-      ...(await MenuService.getAdminAccessMenu(await UiStyleService.get(), loc))
+      ...(await MenuService.getAdminAccessMenu(await UiStyleService.get(userId), loc))
     }, sendOpts);
   }
 
@@ -78,7 +79,7 @@ class AdminHandlers {
     const text = await AdminUIService.formatCloudScreen();
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
-      ...(await MenuService.getAdminCloudMenu(mode, await UiStyleService.get(), loc))
+      ...(await MenuService.getAdminCloudMenu(mode, await UiStyleService.get(userId), loc))
     }, sendOpts);
   }
 
@@ -88,7 +89,7 @@ class AdminHandlers {
     const mode = cloud.mode || STORAGE_BACKEND || 'file';
     return this.bs.sendMessage(userId, `<b>${t('admin.cloud.menu.storage', null, loc)}</b>`, {
       parse_mode: 'HTML',
-      ...(await MenuService.getAdminCloudStorageMenu(mode, await UiStyleService.get(), loc))
+      ...(await MenuService.getAdminCloudStorageMenu(mode, await UiStyleService.get(userId), loc))
     }, sendOpts);
   }
 
@@ -96,7 +97,7 @@ class AdminHandlers {
     const loc = await this.locale(userId);
     return this.bs.sendMessage(userId, `<b>${t('admin.cloud.menu.sync', null, loc)}</b>`, {
       parse_mode: 'HTML',
-      ...(await MenuService.getAdminCloudSyncMenu(await UiStyleService.get(), loc))
+      ...(await MenuService.getAdminCloudSyncMenu(await UiStyleService.get(userId), loc))
     }, sendOpts);
   }
 
@@ -104,7 +105,7 @@ class AdminHandlers {
     const loc = await this.locale(userId);
     return this.bs.sendMessage(userId, `<b>${t('admin.cloud.menu.credentials', null, loc)}</b>`, {
       parse_mode: 'HTML',
-      ...(await MenuService.getAdminCloudCredentialsMenu(await UiStyleService.get(), loc))
+      ...(await MenuService.getAdminCloudCredentialsMenu(await UiStyleService.get(userId), loc))
     }, sendOpts);
   }
 
@@ -112,7 +113,7 @@ class AdminHandlers {
     const loc = await this.locale(userId);
     return this.bs.sendMessage(userId, `<b>${t('admin.cloud.menu.backup', null, loc)}</b>`, {
       parse_mode: 'HTML',
-      ...(await MenuService.getAdminCloudBackupMenu(await UiStyleService.get(), loc))
+      ...(await MenuService.getAdminCloudBackupMenu(await UiStyleService.get(userId), loc))
     }, sendOpts);
   }
 
@@ -120,7 +121,7 @@ class AdminHandlers {
     const loc = await this.locale(userId);
     return this.bs.sendMessage(userId, `<b>${t('admin.access.menu.invites', null, loc)}</b>`, {
       parse_mode: 'HTML',
-      ...(await MenuService.getAdminAccessInvitesMenu(await UiStyleService.get(), loc))
+      ...(await MenuService.getAdminAccessInvitesMenu(await UiStyleService.get(userId), loc))
     }, sendOpts);
   }
 
@@ -128,7 +129,7 @@ class AdminHandlers {
     const loc = await this.locale(userId);
     const text = await AdminUIService.formatSystemScreen();
     const UiStyleService = require('./UiStyleService');
-    const style = await UiStyleService.get();
+    const style = await UiStyleService.get(userId);
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
       reply_markup: {
@@ -144,7 +145,7 @@ class AdminHandlers {
     const loc = await this.locale(userId);
     return this.bs.sendMessage(userId, `<b>${t('admin.maintenance.title', null, loc)}</b>`, {
       parse_mode: 'HTML',
-      ...(await MenuService.getAdminMaintenanceMenu(await UiStyleService.get(), loc))
+      ...(await MenuService.getAdminMaintenanceMenu(await UiStyleService.get(userId), loc))
     }, sendOpts);
   }
 
@@ -215,7 +216,7 @@ class AdminHandlers {
       return this.bs.sendMessage(
         userId,
         t('admin.access.invite_created', { hours, code }, loc),
-        { parse_mode: 'HTML', ...(await MenuService.getAdminAccessMenu(await UiStyleService.get(), loc)) }
+        { parse_mode: 'HTML', ...(await MenuService.getAdminAccessMenu(await UiStyleService.get(userId), loc)) }
       );
     }
 
@@ -241,12 +242,12 @@ class AdminHandlers {
     if (data === 'admin_access_sessions') {
       const sessions = await AccessService.listActiveSessions();
       if (!sessions.length) {
-        return this.bs.sendMessage(userId, t('admin.access.no_sessions', null, loc), await MenuService.getAdminAccessMenu(await UiStyleService.get(), loc));
+        return this.bs.sendMessage(userId, t('admin.access.no_sessions', null, loc), await MenuService.getAdminAccessMenu(await UiStyleService.get(userId), loc));
       }
       return this.bs.sendMessage(
         userId,
         t('admin.access.revoke_hint', null, loc),
-        await MenuService.getAdminSessionsMenu(sessions, await UiStyleService.get(), loc)
+        await MenuService.getAdminSessionsMenu(sessions, await UiStyleService.get(userId), loc)
       );
     }
 
@@ -270,7 +271,7 @@ class AdminHandlers {
       const comparison = await SyncService.compareLocalAndCloud();
       return this.bs.sendMessage(userId, SyncService.formatCompareReport(comparison, loc), {
         parse_mode: 'HTML',
-        ...(await MenuService.getAdminCloudSyncMenu(await UiStyleService.get(), loc))
+        ...(await MenuService.getAdminCloudSyncMenu(await UiStyleService.get(userId), loc))
       });
     }
 
@@ -298,7 +299,7 @@ class AdminHandlers {
     if (data === 'admin_cloud_push') {
       const conflict = await SyncService.getPushConflictWarning();
       if (conflict) {
-        const ui = await UiStyleService.get();
+        const ui = await UiStyleService.get(userId);
         return this.bs.sendMessage(
           userId,
           t('admin.cloud.conflict', { time: conflict.time }, loc),
@@ -382,7 +383,7 @@ class AdminHandlers {
           (r) => (r.key === 'settings' || r.key === 'secrets') && r.localEmpty && !r.cloudEmpty
         );
       if (risky) {
-        const ui = await UiStyleService.get();
+        const ui = await UiStyleService.get(userId);
         return this.bs.sendMessage(
           userId,
           `${SyncService.formatCompareReport(comparison, loc)}\n\n${t('admin.cloud.mode_dual_warn', null, loc)}`,
@@ -417,7 +418,7 @@ class AdminHandlers {
     try {
       const result = await SyncService.syncNow('push', { force: forceEraseSafe });
       if (result.needsConfirm) {
-        const ui = await UiStyleService.get();
+        const ui = await UiStyleService.get(userId);
         const keys = result.blocked.map((b) => b.key).join(', ');
         await this.bs.sendMessage(
           userId,
@@ -450,7 +451,7 @@ class AdminHandlers {
     const loc = await this.locale(userId);
     const entries = await AuditService.listRecent(20);
     const text = await AdminUIService.formatAuditScreen(entries, loc);
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
       reply_markup: {
@@ -484,7 +485,7 @@ class AdminHandlers {
     return this.bs.sendMessage(
       userId,
       t('admin.access.invite_created', { hours, code }, loc),
-      { parse_mode: 'HTML', ...(await MenuService.getAdminAccessMenu(await UiStyleService.get(), loc)) }
+      { parse_mode: 'HTML', ...(await MenuService.getAdminAccessMenu(await UiStyleService.get(userId), loc)) }
     );
   }
 

@@ -6,7 +6,7 @@ const MenuService = require('../services/MenuService');
 const UiStyleService = require('../services/UiStyleService');
 const stateManager = require('../services/StateManager');
 const HistoryService = require('../services/HistoryService');
-const SettingsService = require('../services/SettingsService');
+const UserSettingsService = require('../services/UserSettingsService');
 const { t } = require('../i18n');
 
 class TopicHandlers {
@@ -35,7 +35,7 @@ class TopicHandlers {
     return this.bs.sendMessage(
       userId,
       t('topics.mode_prompt', null, loc),
-      { parse_mode: 'HTML', ...(await MenuService.getTopicModeMenu(await UiStyleService.get(), loc)) }
+      { parse_mode: 'HTML', ...(await MenuService.getTopicModeMenu(await UiStyleService.get(userId), loc)) }
     );
   }
 
@@ -48,7 +48,7 @@ class TopicHandlers {
     return this.bs.sendMessage(
       userId,
       t('topics.count_prompt', null, loc),
-      await MenuService.getTopicCountMenu(await UiStyleService.get(), loc)
+      await MenuService.getTopicCountMenu(await UiStyleService.get(userId), loc)
     );
   }
 
@@ -63,12 +63,12 @@ class TopicHandlers {
       return this.bs.sendMessage(
         userId,
         t('topics.no_posts', null, loc),
-        await MenuService.getTopicModeMenu(await UiStyleService.get(), loc)
+        await MenuService.getTopicModeMenu(await UiStyleService.get(userId), loc)
       );
     }
 
     stateManager.set(userId, { mode: 'topic_pick_reference' });
-    const tz = await SettingsService.getTimezone();
+    const tz = await UserSettingsService.getTimezone(userId);
     const rows = posts.map((p) => {
       const label = HistoryService._buildButtonLabel('published', p.added, p, tz);
       return [{ text: label.slice(0, 60), callback_data: `topic_ref_${p.id}` }];
@@ -110,7 +110,7 @@ class TopicHandlers {
         `${header}\n\n${TopicIdeasService.formatTopicList(result.topics, loc)}`,
         {
           parse_mode: 'HTML',
-          ...(await MenuService.getTopicResultsMenu(result.topics, await UiStyleService.get(), loc))
+          ...(await MenuService.getTopicResultsMenu(result.topics, await UiStyleService.get(userId), loc))
         },
         { append: true }
       );
@@ -122,7 +122,7 @@ class TopicHandlers {
         t('topics.error', { error: err.message }, loc),
         {
           parse_mode: 'HTML',
-          ...(await MenuService.getTopicCountMenu(await UiStyleService.get(), loc))
+          ...(await MenuService.getTopicCountMenu(await UiStyleService.get(userId), loc))
         },
         { append: true }
       );
@@ -147,7 +147,7 @@ class TopicHandlers {
 
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
-      ...(await MenuService.getTopicActionMenu(index, await UiStyleService.get(), loc))
+      ...(await MenuService.getTopicActionMenu(index, await UiStyleService.get(userId), loc))
     });
   }
 

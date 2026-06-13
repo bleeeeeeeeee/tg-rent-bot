@@ -17,7 +17,7 @@ function countCollection(key, data) {
     if (Array.isArray(data.sessions)) n += data.sessions.length;
     return n;
   }
-  if (Array.isArray(data.posts)) return data.posts.length;
+  if (key === 'user_settings') return Object.keys(data.users || {}).length;
   if (Array.isArray(data.drafts)) return data.drafts.length;
   if (Array.isArray(data.entries)) return data.entries.length;
   return data ? 1 : 0;
@@ -40,7 +40,7 @@ function collectionLabel(key, locale = 'ru') {
       existing_posts: 'архив постов',
       processed_posts: 'обработанные посты',
       drafts: 'черновики',
-      scheduled: 'очередь публикаций'
+      user_settings: 'настройки пользователей',
     },
     en: {
       settings: 'settings (AI, timezone)',
@@ -49,7 +49,8 @@ function collectionLabel(key, locale = 'ru') {
       existing_posts: 'post archive',
       processed_posts: 'processed posts',
       drafts: 'drafts',
-      scheduled: 'scheduled posts'
+      scheduled: 'очередь публикаций',
+      user_settings: 'настройки пользователей'
     }
   };
   const map = labels[locale] || labels.ru;

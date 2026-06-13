@@ -109,7 +109,8 @@ class BotService {
   }
 
   async locale(userId) {
-    return SettingsService.getLocale();
+    const UserSettingsService = require('./UserSettingsService');
+    return UserSettingsService.getLocale(userId);
   }
 
   async tLoc(key, params, userId) {
@@ -184,7 +185,7 @@ class BotService {
           saveKind === 'wizard'
             ? 'Выйти из мастера? Прогресс можно сохранить в черновики.'
             : 'Выйти? Пост можно сохранить в черновики.';
-        return this.sendMessage(userId, text, MenuService.getCancelConfirmMenu({ saveKind, ui: await UiStyleService.get() }));
+        return this.sendMessage(userId, text, MenuService.getCancelConfirmMenu({ saveKind, ui: await UiStyleService.get(userId) }));
       }
       await this.clearState(userId);
       return this.sendMessage(userId, '❌ Действие отменено', await MenuService.getMainMenu());
@@ -204,11 +205,11 @@ class BotService {
       return this.wizardHandlers.showWizardReview(userId, state);
     }
     if (state.mode === 'wizard_generate_error') {
-      const ui = await UiStyleService.get();
+      const ui = await UiStyleService.get(userId);
       return this.sendMessage(userId, 'Продолжайте или выберите действие:', MenuService.getWizardErrorMenu(ui));
     }
     if (state.mode === 'choose_post_action') {
-      const ui = await UiStyleService.get();
+      const ui = await UiStyleService.get(userId);
       return this.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu(ui));
     }
     if (state.mode === 'wizard_edit') {
@@ -318,7 +319,8 @@ class BotService {
   }
 
   async ensureReplyMenuKeyboard(userId, force = false) {
-    if (!(await SettingsService.getChatCleanup())) return;
+    const UserSettingsService = require('./UserSettingsService');
+    if (!(await UserSettingsService.getChatCleanup(userId))) return;
     if (!this.isAdmin(userId)) return;
     if (!force && ChatCleanupService.hasReplyKeyboard(userId)) return;
     await ChatCleanupService.ensureReplyKeyboard(
@@ -338,12 +340,13 @@ class BotService {
       delete options.noNav;
     }
     const { append = false, pinned = false, track = true, noNav = false } = sendOpts;
-    const cleanup = await SettingsService.getChatCleanup();
+    const UserSettingsService = require('./UserSettingsService');
+    const cleanup = await UserSettingsService.getChatCleanup(userId);
     const previousEphemeral = !append && cleanup ? ChatCleanupService.snapshotEphemeral(userId) : [];
 
     options.reply_markup = options.reply_markup || {};
     if (!noNav && !options.reply_markup.inline_keyboard && !options.reply_markup.keyboard) {
-      const ui = await UiStyleService.get();
+      const ui = await UiStyleService.get(userId);
       options.reply_markup.inline_keyboard = MenuService.getNavRow('main', ui);
     }
     if (options.reply_markup.inline_keyboard && !cleanup) {
@@ -414,6 +417,8 @@ class BotService {
 
   async handleStart(msg) {
     const userId = msg.from.id;
+    const UserSettingsService = require('./UserSettingsService');
+    await UserSettingsService.ensureUser(userId);
     const loc = await this.locale(userId);
     await ChatCleanupService.consumeUserMessage(this.bot, msg);
     await this.clearState(userId);
@@ -465,7 +470,7 @@ class BotService {
   }
 
   async getMainMenuFor(userId) {
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     const locale = await this.locale(userId);
     const role = this.getUserRole(userId) === 'guest' ? 'guest' : 'owner';
     return MenuService.getMainMenu(ui, { role, locale });
@@ -571,7 +576,7 @@ class BotService {
       if (drafts.length === 0) {
         return this.sendMessage(userId, 'Черновиков нет.', await MenuService.getMainMenu());
       }
-      return this.sendMessage(userId, 'Выберите черновик:', MenuService.getDraftsMenu(drafts, await UiStyleService.get()));
+      return this.sendMessage(userId, 'Выберите черновик:', MenuService.getDraftsMenu(drafts, await UiStyleService.get(userId)));
     }
 
     if (data === 'menu_history' || data.startsWith('history_')) {
@@ -614,7 +619,7 @@ class BotService {
         });
         if (!publish.ok) {
           await this.sendMessage(userId, publish.message);
-          return this.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu(await UiStyleService.get()));
+          return this.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu(await UiStyleService.get(userId)));
         }
         await this.sendPublishConfirmation(userId, publish.result);
         await this.clearState(userId);
@@ -627,7 +632,7 @@ class BotService {
         await this.sendMessage(
           userId,
           'Выберите дату для публикации:',
-          MenuService.getCalendar(today.getFullYear(), today.getMonth(), await UiStyleService.get())
+          MenuService.getCalendar(today.getFullYear(), today.getMonth(), await UiStyleService.get(userId))
         );
         break;
       }
@@ -656,14 +661,14 @@ class BotService {
     if (prevMatch) {
       const year = parseInt(prevMatch[1], 10);
       const month = parseInt(prevMatch[2], 10);
-      return this.sendMessage(userId, 'Выберите дату:', MenuService.getCalendar(year, month, await UiStyleService.get()));
+      return this.sendMessage(userId, 'Выберите дату:', MenuService.getCalendar(year, month, await UiStyleService.get(userId)));
     }
 
     const nextMatch = data.match(/^calendar_next_(\d+)-(\d+)$/);
     if (nextMatch) {
       const year = parseInt(nextMatch[1], 10);
       const month = parseInt(nextMatch[2], 10);
-      return this.sendMessage(userId, 'Выберите дату:', MenuService.getCalendar(year, month, await UiStyleService.get()));
+      return this.sendMessage(userId, 'Выберите дату:', MenuService.getCalendar(year, month, await UiStyleService.get(userId)));
     }
 
     const dateMatch = data.match(/^calendar_(\d{4}-\d{2}-\d{2})$/);
@@ -761,7 +766,7 @@ class BotService {
         previewText: extractText(msg),
         media: parseMedia(msg)
       });
-      return this.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu(await UiStyleService.get()));
+      return this.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu(await UiStyleService.get(userId)));
     }
 
     if (state.mode === 'waiting_edit') {

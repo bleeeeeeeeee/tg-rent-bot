@@ -50,7 +50,7 @@ class DraftHandlers {
       return this.bs.sendMessage(
         userId,
         `✨ <b>${draft.label || 'Мастер ИИ'}</b>\n\nПродолжить с сохранённого шага?`,
-        { parse_mode: 'HTML', ...MenuService.getWizardDraftActionMenu(draft.id, await UiStyleService.get()) }
+        { parse_mode: 'HTML', ...MenuService.getWizardDraftActionMenu(draft.id, await UiStyleService.get(userId)) }
       );
     }
 
@@ -71,7 +71,7 @@ class DraftHandlers {
       });
       return this.bs.sendMessage(userId, text, {
         parse_mode: 'HTML',
-        ...(await MenuService.getTopicActionMenu(0, await UiStyleService.get(), await this.bs.locale(userId)))
+        ...(await MenuService.getTopicActionMenu(0, await UiStyleService.get(userId), await this.bs.locale(userId)))
       });
     }
 
@@ -108,7 +108,7 @@ class DraftHandlers {
       return this.bs.sendMessage(
         userId,
         'Действия с черновиком:',
-        MenuService.getDraftActionMenu(draftId, await UiStyleService.get())
+        MenuService.getDraftActionMenu(draftId, await UiStyleService.get(userId))
       );
     }
 
@@ -141,7 +141,7 @@ class DraftHandlers {
         return this.bs.sendMessage(
           userId,
           'Действия с черновиком:',
-          MenuService.getDraftActionMenu(draft.id, await UiStyleService.get())
+          MenuService.getDraftActionMenu(draft.id, await UiStyleService.get(userId))
         );
       }
       await DraftService.remove(draft.id);
@@ -168,7 +168,7 @@ class DraftHandlers {
       return this.bs.sendMessage(
         userId,
         'Выберите дату для публикации:',
-        MenuService.getCalendar(today.getFullYear(), today.getMonth(), await UiStyleService.get())
+        MenuService.getCalendar(today.getFullYear(), today.getMonth(), await UiStyleService.get(userId))
       );
     }
   }

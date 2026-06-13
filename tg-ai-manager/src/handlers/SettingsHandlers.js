@@ -1,4 +1,5 @@
 const SettingsService = require('../services/SettingsService');
+const UserSettingsService = require('../services/UserSettingsService');
 const SecretsService = require('../services/SecretsService');
 const SettingsUIService = require('../services/SettingsUIService');
 const MenuService = require('../services/MenuService');
@@ -38,9 +39,9 @@ class SettingsHandlers {
   }
 
   async showRoot(userId) {
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     const locale = await this.bs.locale(userId);
-    const text = await SettingsUIService.formatSettingsRoot();
+    const text = await SettingsUIService.formatSettingsRoot(userId);
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
       ...(await MenuService.getSettingsRootMenu(ui, locale))
@@ -48,8 +49,8 @@ class SettingsHandlers {
   }
 
   async showAppearance(userId) {
-    const ui = await UiStyleService.get();
-    const text = await SettingsUIService.formatAppearanceScreen(ui);
+    const ui = await UiStyleService.get(userId);
+    const text = await SettingsUIService.formatAppearanceScreen(ui, userId);
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
       ...MenuService.getSettingsAppearanceMenu(ui)
@@ -61,7 +62,7 @@ class SettingsHandlers {
     const autoEnrich = await SettingsService.getAutoEnrich();
     const configuredIds = await SettingsUIService.getConfiguredProviderIds();
     const locale = await this.bs.locale(userId);
-    const text = await SettingsUIService.formatAiScreen();
+    const text = await SettingsUIService.formatAiScreen(userId);
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
       ...(await MenuService.getSettingsAiMenu(active, autoEnrich, configuredIds, locale))
@@ -69,10 +70,10 @@ class SettingsHandlers {
   }
 
   async showGeneral(userId) {
-    const tz = await SettingsService.getTimezone();
-    const chatCleanup = await SettingsService.getChatCleanup();
+    const tz = await UserSettingsService.getTimezone(userId);
+    const chatCleanup = await UserSettingsService.getChatCleanup(userId);
     const locale = await this.bs.locale(userId);
-    const text = await SettingsUIService.formatGeneralScreen();
+    const text = await SettingsUIService.formatGeneralScreen(userId);
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
       ...(await MenuService.getSettingsGeneralMenu(tz, chatCleanup, locale))
@@ -80,7 +81,7 @@ class SettingsHandlers {
   }
 
   async showAppearanceNav(userId) {
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     const locale = await this.bs.locale(userId);
     return this.bs.sendMessage(userId, `<b>${locale === 'en' ? 'Navigation' : 'Навигация'}</b>`, {
       parse_mode: 'HTML',
@@ -99,7 +100,7 @@ class SettingsHandlers {
   }
 
   async showTimezone(userId, sendOpts = {}) {
-    const tz = await SettingsService.getTimezone();
+    const tz = await UserSettingsService.getTimezone(userId);
     const locale = await this.bs.locale(userId);
     return this.bs.sendMessage(userId, `<b>${locale === 'en' ? 'Timezone' : 'Часовой пояс'}</b>`, {
       parse_mode: 'HTML',
@@ -164,20 +165,20 @@ class SettingsHandlers {
     }
 
     if (data === 'settings_ui_toggle_emojis') {
-      const ui = await SettingsService.getUiStyle();
-      await SettingsService.setUiStyle({ useEmojis: !ui.useEmojis });
+      const ui = await UserSettingsService.getUiStyle(userId);
+      await UserSettingsService.setUiStyle(userId, { useEmojis: !ui.useEmojis });
       ChatCleanupService.clearReplyKeyboard(userId);
       await this.bs.ensureReplyMenuKeyboard(userId, true);
       return this.showAppearance(userId);
     }
 
     if (data === 'settings_ui_nav_text') {
-      await SettingsService.setUiStyle({ navStyle: 'text' });
+      await UserSettingsService.setUiStyle(userId, { navStyle: 'text' });
       return this.showAppearanceNav(userId);
     }
 
     if (data === 'settings_ui_nav_arrows') {
-      await SettingsService.setUiStyle({ navStyle: 'arrows' });
+      await UserSettingsService.setUiStyle(userId, { navStyle: 'arrows' });
       return this.showAppearanceNav(userId);
     }
 
@@ -187,7 +188,7 @@ class SettingsHandlers {
     }
 
     if (data === 'settings_language') {
-      const loc = await SettingsService.getLocale();
+      const loc = await UserSettingsService.getLocale(userId);
       return this.bs.sendMessage(
         userId,
         `<b>${t('settings.language', null, loc)}</b>`,
@@ -223,7 +224,7 @@ class SettingsHandlers {
 
     if (data === 'settings_lang_ru' || data === 'settings_lang_en') {
       const newLoc = data === 'settings_lang_en' ? 'en' : 'ru';
-      await SettingsService.setLocale(newLoc);
+      await UserSettingsService.setLocale(userId, newLoc);
       const label = t(newLoc === 'en' ? 'settings.lang.en' : 'settings.lang.ru', null, newLoc);
       await this.bs.sendMessage(userId, t('settings.lang.changed', { lang: label }, newLoc));
       return this.showGeneral(userId);
@@ -283,8 +284,8 @@ class SettingsHandlers {
     }
 
     if (data === 'settings_toggle_cleanup') {
-      const current = await SettingsService.getChatCleanup();
-      await SettingsService.setChatCleanup(!current);
+      const current = await UserSettingsService.getChatCleanup(userId);
+      await UserSettingsService.setChatCleanup(userId, !current);
       return this.showGeneral(userId);
     }
 
@@ -396,7 +397,7 @@ class SettingsHandlers {
 
     const tzMatch = data.match(/^settings_tz_(.+)$/);
     if (tzMatch && tzMatch[1] !== 'manual') {
-      await SettingsService.setTimezone(tzMatch[1]);
+      await UserSettingsService.setTimezone(userId, tzMatch[1]);
       await this.bs.sendMessage(userId, `Часовой пояс: ${tzMatch[1]} ✅`);
       return this.showTimezone(userId);
     }
@@ -609,7 +610,7 @@ class SettingsHandlers {
       } catch {
         return this.bs.sendMessage(userId, 'Неверный часовой пояс. Пример: Europe/Moscow');
       }
-      await SettingsService.setTimezone(tz);
+      await UserSettingsService.setTimezone(userId, tz);
       await this.bs.clearState(userId);
       await this.bs.sendMessage(userId, `Часовой пояс: ${tz} ✅`);
       return this.showTimezone(userId);

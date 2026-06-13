@@ -27,6 +27,19 @@ class DualSyncBackend {
   }
 
   async write(key, data) {
+    if (shouldHydrateKey(key) && isCollectionEmpty(key, data)) {
+      try {
+        const remote = await this.cloud.read(key, null);
+        if (!isCollectionEmpty(key, remote)) {
+          console.warn(`[DualSyncBackend] Blocked empty write to cloud for ${key}, restoring from cloud`);
+          await this.file.write(key, remote);
+          return remote;
+        }
+      } catch (err) {
+        console.warn(`[DualSyncBackend] empty-write guard for ${key}:`, err.message);
+      }
+    }
+
     await this.file.write(key, data);
     try {
       await this.cloud.write(key, data);

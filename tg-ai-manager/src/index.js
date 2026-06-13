@@ -100,10 +100,10 @@ process.on('SIGINT', () => shutdown('SIGINT'));
     }
 
     await ExistingPosts.migrateSchema();
+    await SyncService.init();
     await SecretsService.seedFromEnv();
     await AccessService.init();
     await AiProviderRegistry.refreshCustom();
-    await SyncService.init();
 
     botService = new BotService(PostRepository, { usePolling: !useWebhook });
 

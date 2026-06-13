@@ -33,6 +33,8 @@ class SupabaseBackend {
       case 'secrets':
       case 'access':
         return this._readSingleton(key, defaultValue);
+      case 'user_settings':
+        return this._readUserSettingsMap(defaultValue);
       case 'existing_posts':
         return this._readPosts(defaultValue);
       case 'processed_posts':
@@ -52,6 +54,9 @@ class SupabaseBackend {
       case 'secrets':
       case 'access':
         await this._writeSingleton(key, data);
+        break;
+      case 'user_settings':
+        await this._writeUserSettingsMap(data);
         break;
       case 'existing_posts':
         await this._writePosts(data);
@@ -86,6 +91,53 @@ class SupabaseBackend {
       payload,
       updated_at: new Date().toISOString()
     });
+    if (error) throw new Error(error.message);
+  }
+
+  async getUserSettings(telegramUserId) {
+    const { data, error } = await this.client
+      .from('user_settings')
+      .select('payload')
+      .eq('telegram_user_id', String(telegramUserId))
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data?.payload ?? null;
+  }
+
+  async upsertUserSettings(telegramUserId, payload) {
+    const { error } = await this.client.from('user_settings').upsert({
+      telegram_user_id: String(telegramUserId),
+      payload,
+      updated_at: new Date().toISOString()
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  async _readUserSettingsMap(defaultValue) {
+    const { data, error } = await this.client.from('user_settings').select('telegram_user_id, payload');
+    if (error) {
+      if (/does not exist|relation/.test(error.message)) {
+        return defaultValue ?? { users: {} };
+      }
+      throw new Error(error.message);
+    }
+    const users = {};
+    for (const row of data || []) {
+      users[String(row.telegram_user_id)] = row.payload;
+    }
+    return { users };
+  }
+
+  async _writeUserSettingsMap(doc) {
+    const users = doc?.users || {};
+    const ids = Object.keys(users);
+    if (!ids.length) return;
+    const rows = ids.map((id) => ({
+      telegram_user_id: id,
+      payload: users[id],
+      updated_at: users[id]?.updatedAt || new Date().toISOString()
+    }));
+    const { error } = await this.client.from('user_settings').upsert(rows);
     if (error) throw new Error(error.message);
   }
 

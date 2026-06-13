@@ -2,7 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { COLLECTIONS } = require('./collections');
 
-const STORAGE_DIR = path.join(__dirname, '../../storage');
+const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '../../storage');
 
 class FileBackend {
   constructor() {

@@ -14,7 +14,7 @@ async function createGramClient() {
     new StringSession(TG_SESSION),
     Number(TG_API_ID),
     TG_API_HASH,
-    { connectionRetries: 5 }
+    { connectionRetries: 5, receiveUpdates: false }
   );
 
   await client.connect();

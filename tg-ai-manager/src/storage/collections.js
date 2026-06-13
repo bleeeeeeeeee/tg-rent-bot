@@ -6,7 +6,8 @@ const COLLECTIONS = {
   processed_posts: { file: 'processed_posts.json', supabaseTable: 'processed_entries' },
   drafts: { file: 'drafts.json', supabaseTable: 'drafts' },
   scheduled: { file: 'scheduled.json', supabaseTable: 'scheduled_posts' },
-  access: { file: 'access.json', supabaseTable: 'access_data' }
+  access: { file: 'access.json', supabaseTable: 'access_data' },
+  user_settings: { file: 'user_settings.json', supabaseTable: 'user_settings' }
 };
 
 module.exports = { COLLECTIONS };

@@ -1,4 +1,4 @@
-const SettingsService = require('./SettingsService');
+const UserSettingsService = require('./UserSettingsService');
 
 class ChatCleanupService {
   constructor() {
@@ -69,8 +69,12 @@ class ChatCleanupService {
     return deleted;
   }
 
+  async _chatCleanupEnabled(chatId) {
+    return UserSettingsService.getChatCleanup(chatId);
+  }
+
   async flushBotMessages(bot, chatId, { except = [] } = {}) {
-    const enabled = await SettingsService.getChatCleanup();
+    const enabled = await this._chatCleanupEnabled(chatId);
     if (!enabled) return 0;
 
     const exceptSet = new Set((except || []).filter(Boolean));
@@ -88,7 +92,7 @@ class ChatCleanupService {
   }
 
   async deleteUserMessageIfEnabled(bot, chatId, messageId) {
-    if (!(await SettingsService.getChatCleanup())) return;
+    if (!(await this._chatCleanupEnabled(chatId))) return;
     await this.deleteUserMessage(bot, chatId, messageId);
   }
 

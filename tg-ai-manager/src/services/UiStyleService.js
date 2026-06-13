@@ -1,4 +1,5 @@
 const SettingsService = require('./SettingsService');
+const UserSettingsService = require('./UserSettingsService');
 
 const DEFAULT_UI = {
   useEmojis: true,
@@ -37,8 +38,10 @@ const NAV_LABELS_PLAIN = {
 };
 
 class UiStyleService {
-  static async get() {
-    const stored = await SettingsService.getUiStyle();
+  static async get(userId = null) {
+    const stored = userId
+      ? await UserSettingsService.getUiStyle(userId)
+      : await SettingsService.getUiStyle();
     return { ...DEFAULT_UI, ...stored };
   }
 

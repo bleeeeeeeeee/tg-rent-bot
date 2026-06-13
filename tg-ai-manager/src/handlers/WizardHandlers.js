@@ -82,7 +82,7 @@ class WizardHandlers {
   }
 
   async showWizardStep(userId, mode) {
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     const state = stateManager.get(userId);
     const wizard = state?.wizard;
     const editing = state?.wizardStepEditing === mode;
@@ -127,7 +127,7 @@ class WizardHandlers {
   }
 
   async showWizardMediaStep(userId, state, ui = null, sendOpts = {}) {
-    if (!ui) ui = await UiStyleService.get();
+    if (!ui) ui = await UiStyleService.get(userId);
     const wizard = state?.wizard;
     MediaLib.migrateLegacyMedia(wizard);
     const mode = 'wizard_media';
@@ -214,7 +214,7 @@ class WizardHandlers {
 
   async addWizardMediaMessages(userId, msgs, state) {
     if (!state?.wizard) return;
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     MediaLib.migrateLegacyMedia(state.wizard);
 
     const items = [];
@@ -294,13 +294,13 @@ class WizardHandlers {
       state.mode = 'wizard_generate_error';
       stateManager.set(userId, state);
       const msg = WritingService.formatGenerateError(err);
-      return this.bs.sendMessage(userId, `❌ ${msg}`, MenuService.getWizardErrorMenu(await UiStyleService.get()));
+      return this.bs.sendMessage(userId, `❌ ${msg}`, MenuService.getWizardErrorMenu(await UiStyleService.get(userId)));
     }
   }
 
   async showWizardReview(userId, state, extraNote = '') {
     const regenLimit = (state.wizard.regenerateCount || 0) >= 3;
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     let text =
       '✨ <b>Предпросмотр поста</b>\n\n' +
       'Текст выше — так пост будет выглядеть в канале.\n' +
@@ -350,7 +350,7 @@ class WizardHandlers {
         keywords: state.wizard.keywords
       }
     });
-    return this.bs.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu(await UiStyleService.get()));
+    return this.bs.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu(await UiStyleService.get(userId)));
   }
 
   async handleCallback(userId, data, state) {
@@ -369,7 +369,7 @@ class WizardHandlers {
       if (!state?.wizard) {
         return this.bs.sendMessage(userId, 'Сессия мастера истекла. Начните заново.', await MenuService.getMainMenu());
       }
-      return this.bs.sendMessage(userId, 'Перейти к шагу:', MenuService.getWizardStepsMenu(state.mode, state.wizard, await UiStyleService.get()));
+      return this.bs.sendMessage(userId, 'Перейти к шагу:', MenuService.getWizardStepsMenu(state.mode, state.wizard, await UiStyleService.get(userId)));
     }
 
     if (data === 'wizard_steps_close') {
@@ -515,7 +515,7 @@ class WizardHandlers {
     if (mediaToggleMatch) {
       const result = MediaLib.toggleSelect(state.wizard, mediaToggleMatch[1]);
       if (!result.ok) {
-        const ui = await UiStyleService.get();
+        const ui = await UiStyleService.get(userId);
         return this.bs.sendMessage(userId, result.error, MenuService.getWizardMediaGalleryMenu('wizard_skip_media', {
           wizard: state.wizard,
           mode: 'wizard_media',
@@ -607,7 +607,7 @@ class WizardHandlers {
     if (this.isWizardStepAwaitingChoice(state)) {
       return this.bs.sendMessage(userId, 'Используйте кнопки навигации внизу: «Изменить», «Далее →» или «К шагам».');
     }
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     const value = msg.text?.trim();
     if (!value) {
       return this.bs.sendMessage(
@@ -631,7 +631,7 @@ class WizardHandlers {
     if (this.isWizardStepAwaitingChoice(state)) {
       return this.bs.sendMessage(userId, 'Используйте кнопки навигации внизу: «Изменить», «Далее →» или «К шагам».');
     }
-    const ui = await UiStyleService.get();
+    const ui = await UiStyleService.get(userId);
     const value = msg.text?.trim();
     if (!value) {
       return this.bs.sendMessage(

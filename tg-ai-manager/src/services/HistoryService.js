@@ -5,6 +5,7 @@ const { shouldHideFromList, getAlbumParts, countAlbumMedia, isEmptyPost } = requ
 const { buildPostUrl } = require('../utils/channelUrl');
 const { countEdits, buildEditTimeline, hasEditHistory } = require('../utils/postEditHistory');
 const SettingsService = require('./SettingsService');
+const UserSettingsService = require('./UserSettingsService');
 const { t } = require('../i18n');
 
 const PAGE_SIZE = 8;
@@ -16,6 +17,19 @@ const LIFECYCLE_LABELS = {
 };
 
 class HistoryService {
+  static async _userContext(userId, locale = null) {
+    if (userId) {
+      return {
+        locale: locale || (await UserSettingsService.getLocale(userId)),
+        timezone: await UserSettingsService.getTimezone(userId)
+      };
+    }
+    return {
+      locale: locale || (await SettingsService.getLocale()),
+      timezone: await SettingsService.getTimezone()
+    };
+  }
+
   static async getFilterLabel(filter, locale = null) {
     const loc = locale || (await SettingsService.getLocale());
     const key = `history.filter.${filter}`;
@@ -167,8 +181,8 @@ class HistoryService {
     return copy;
   }
 
-  static async list({ filter = 'published', page = 0, pageSize = PAGE_SIZE } = {}) {
-    const timezone = await SettingsService.getTimezone();
+  static async list({ filter = 'published', page = 0, pageSize = PAGE_SIZE, userId = null } = {}) {
+    const { timezone, locale } = await this._userContext(userId);
     let items = [];
 
     if (filter === 'published' || filter === 'all') {
@@ -188,7 +202,6 @@ class HistoryService {
     const safePage = Math.min(Math.max(0, page), pages - 1);
     const slice = items.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
-    const locale = await SettingsService.getLocale();
     const archiveTotal =
       filter === 'published' || filter === 'all'
         ? (await ExistingPosts.getAll()).filter((p) => p.lifecycleStatus !== 'deleted').length
@@ -329,9 +342,10 @@ class HistoryService {
     return lines;
   }
 
-  static async formatPublishedCard(item, locale = null) {
-    const loc = locale || (await SettingsService.getLocale());
-    const timezone = await SettingsService.getTimezone();
+  static async formatPublishedCard(item, locale = null, userId = null) {
+    const ctx = await this._userContext(userId, locale);
+    const loc = ctx.locale;
+    const timezone = ctx.timezone;
     const statusIcon =
       item.lifecycleStatus === 'deleted' ? '🗑' : item.lifecycleStatus === 'edited' ? '✏️' : '✅';
     const lines = [`${statusIcon} <b>${t('history.card.post', { id: item.channelMessageId }, loc)}</b>`, ''];
@@ -381,9 +395,10 @@ class HistoryService {
     return lines.join('\n');
   }
 
-  static async formatEditHistoryCard(item, { versionIndex = null } = {}, locale = null) {
-    const loc = locale || (await SettingsService.getLocale());
-    const timezone = await SettingsService.getTimezone();
+  static async formatEditHistoryCard(item, { versionIndex = null } = {}, locale = null, userId = null) {
+    const ctx = await this._userContext(userId, locale);
+    const loc = ctx.locale;
+    const timezone = ctx.timezone;
     const timeline = buildEditTimeline({
       post: item.preview,
       postOriginal: item.postOriginal,
@@ -431,8 +446,8 @@ class HistoryService {
     }).length;
   }
 
-  static async formatScheduledCard(item) {
-    const timezone = await SettingsService.getTimezone();
+  static async formatScheduledCard(item, userId = null) {
+    const timezone = (await this._userContext(userId)).timezone;
     const lines = ['📅 <b>Запланированный пост</b>', ''];
     lines.push(`⏰ Публикация: ${this.formatDate(item.publishAt, timezone)}`);
     if (item.media) lines.push(`🖼 Медиа: ${item.media.type}`);
