@@ -57,6 +57,15 @@ class SettingsHandlers {
     });
   }
 
+  async showConnectProviders(userId) {
+    const loc = await this.bs.locale(userId);
+    return this.bs.sendMessage(
+      userId,
+      `<b>${t('settings.ai.menu.connect', null, loc)}</b>`,
+      { parse_mode: 'HTML', ...(await MenuService.getSettingsAddProviderMenu(loc)) }
+    );
+  }
+
   async showAi(userId, sendOpts = {}) {
     const active = await SettingsService.getActiveProvider();
     const autoEnrich = await SettingsService.getAutoEnrich();
@@ -200,13 +209,8 @@ class SettingsHandlers {
       return this.showTimezone(userId);
     }
 
-    if (data === 'settings_ai_connect') {
-      const loc = await this.bs.locale(userId);
-      return this.bs.sendMessage(
-        userId,
-        `<b>${t('settings.ai.menu.connect', null, loc)}</b>`,
-        { parse_mode: 'HTML', ...(await MenuService.getSettingsAiConnectMenu(loc)) }
-      );
+    if (data === 'settings_ai_connect' || data === 'settings_ai_add') {
+      return this.showConnectProviders(userId);
     }
 
     if (data === 'settings_ai_active') {
@@ -298,22 +302,13 @@ class SettingsHandlers {
     if (data === 'settings_ai_pick_list') {
       const configuredIds = await SettingsUIService.getConfiguredProviderIds();
       if (configuredIds.length === 0) {
-        return this.bs.sendMessage(userId, 'Сначала подключите сервис в разделе «Подключить сервис».', await MenuService.getSettingsAddProviderMenu());
+        return this.showConnectProviders(userId);
       }
       const active = await SettingsService.getActiveProvider();
       return this.bs.sendMessage(
         userId,
         'Выберите активную нейросеть:',
         MenuService.getSettingsPickProviderMenu(configuredIds, active)
-      );
-    }
-
-    if (data === 'settings_ai_add') {
-      const loc = await this.bs.locale(userId);
-      return this.bs.sendMessage(
-        userId,
-        `<b>${loc === 'en' ? 'Built-in services' : 'Встроенные сервисы'}</b>`,
-        { parse_mode: 'HTML', ...(await MenuService.getSettingsAddProviderMenu(loc)) }
       );
     }
 

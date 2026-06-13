@@ -96,6 +96,7 @@ module.exports = {
   'settings.ai.menu.active': 'Active provider',
   'settings.ai.menu.custom': 'Custom API',
   'settings.ai.custom_api': 'Custom API',
+  'settings.ai.add_custom': 'Add your own',
   'settings.ai.custom.label_prompt': 'API name (e.g. My LLM):',
   'settings.ai.custom.url_prompt': 'Base URL (OpenAI-compatible, e.g. https://api.example.com/v1):',
   'settings.ai.custom.key_prompt': 'API key (message deleted). Send «-» if no key needed:',

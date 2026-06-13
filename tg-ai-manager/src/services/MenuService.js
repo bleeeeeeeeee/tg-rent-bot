@@ -730,20 +730,6 @@ class MenuService {
         return { reply_markup: { inline_keyboard: keyboard } };
     }
 
-    static async getSettingsAiConnectMenu(locale = null) {
-        const loc = locale || await this._loc();
-        return {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: '➕ ' + (loc === 'en' ? 'Built-in services' : 'Встроенные сервисы'), callback_data: 'settings_ai_add' }],
-                    [{ text: '⚙️ ' + this._t('settings.ai.custom_api', loc), callback_data: 'settings_ai_custom_start' }],
-                    [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai' }],
-                    [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
-                ]
-            }
-        };
-    }
-
     static async getSettingsAiActiveMenu(activeProvider, configuredIds, locale = null) {
         const loc = locale || await this._loc();
         const keyboard = [
@@ -798,7 +784,10 @@ class MenuService {
             callback_data: `settings_ai_add_${p.id}`
         }]));
         keyboard.push(
-            [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai_connect' }],
+            [{ text: '⚙️ ' + this._t('settings.ai.add_custom', loc), callback_data: 'settings_ai_custom_start' }]
+        );
+        keyboard.push(
+            [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai' }],
             [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };

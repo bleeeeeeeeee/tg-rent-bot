@@ -96,6 +96,7 @@ module.exports = {
   'settings.ai.menu.active': 'Активная нейросеть',
   'settings.ai.menu.custom': 'Свой API',
   'settings.ai.custom_api': 'Свой API',
+  'settings.ai.add_custom': 'Добавить свой',
   'settings.ai.custom.label_prompt': 'Название вашего API (например My LLM):',
   'settings.ai.custom.url_prompt': 'Base URL (OpenAI-compatible, например https://api.example.com/v1):',
   'settings.ai.custom.key_prompt': 'API key (сообщение будет удалено). Можно отправить «-» если ключ не нужен:',
