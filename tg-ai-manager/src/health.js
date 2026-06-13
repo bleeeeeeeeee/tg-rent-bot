@@ -87,14 +87,20 @@ function startHealthServer(port = Number(process.env.HEALTH_PORT || process.env.
     }
 
     const sync = SyncService.getStatus();
-    const ok = storageOk;
+    let ollama = null;
+    if (process.env.OLLAMA_BASE_URL) {
+      const OllamaBootstrap = require('./services/OllamaBootstrap');
+      ollama = await OllamaBootstrap.healthStatus();
+    }
+    const ok = storageOk && (!ollama || ollama.ok !== false);
     const body = {
       ok,
       uptime: Math.floor(process.uptime()),
       storage: storageOk ? 'ok' : storageError,
       sync: sync.connected ? 'connected' : 'offline',
       instanceId: sync.instanceId,
-      telegram: webhookBot ? 'webhook' : 'polling'
+      telegram: webhookBot ? 'webhook' : 'polling',
+      ...(ollama ? { ollama } : {})
     };
 
     res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' });

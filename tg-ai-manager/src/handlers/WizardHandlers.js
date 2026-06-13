@@ -280,7 +280,7 @@ class WizardHandlers {
   async runWizardGeneration(userId, state) {
     state.mode = 'wizard_generating';
     stateManager.set(userId, state);
-    await this.bs.sendMessage(userId, '⏳ Генерирую текст поста…', {}, { noNav: true });
+    await this.bs.sendMessage(userId, '⏳ Генерирую текст поста…', {}, { noNav: true, transient: true });
 
     try {
       const bodyHtml = await WritingService.generatePost(state.wizard);

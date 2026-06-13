@@ -276,7 +276,7 @@ class AdminHandlers {
     }
 
     if (data === 'admin_cloud_test') {
-      await this.bs.sendMessage(userId, t('admin.cloud.testing', null, loc), {}, { noNav: true });
+      await this.bs.sendMessage(userId, t('admin.cloud.testing', null, loc), {}, { noNav: true, transient: true });
       const result = await SyncService.testConnection();
       const text = result.ok
         ? t('admin.cloud.test_ok', null, loc)
@@ -286,7 +286,7 @@ class AdminHandlers {
     }
 
     if (data === 'admin_cloud_migrate') {
-      await this.bs.sendMessage(userId, t('admin.cloud.migrating', null, loc), {}, { noNav: true });
+      await this.bs.sendMessage(userId, t('admin.cloud.migrating', null, loc), {}, { noNav: true, transient: true });
       try {
         const result = await SyncService.migrateToCloud();
         await this.bs.sendMessage(userId, AdminUIService.formatMigrationReport(result, loc), { parse_mode: 'HTML', append: true });
@@ -326,7 +326,7 @@ class AdminHandlers {
     }
 
     if (data === 'admin_cloud_pull') {
-      await this.bs.sendMessage(userId, t('admin.cloud.syncing', null, loc), {}, { noNav: true });
+      await this.bs.sendMessage(userId, t('admin.cloud.syncing', null, loc), {}, { noNav: true, transient: true });
       try {
         const result = await SyncService.syncNow('pull');
         await AiProviderRegistry.refreshCustom();
@@ -361,7 +361,7 @@ class AdminHandlers {
       if (!ChannelSyncService.canSync()) {
         return this.bs.sendMessage(userId, t('admin.maintenance.reconcile_unavailable', null, loc), { parse_mode: 'HTML' });
       }
-      await this.bs.sendMessage(userId, t('admin.maintenance.reconcile_running', null, loc), {}, { noNav: true });
+      await this.bs.sendMessage(userId, t('admin.maintenance.reconcile_running', null, loc), {}, { noNav: true, transient: true });
       try {
         const result = await ChannelSyncService.syncChannel();
         await this.bs.sendMessage(userId, ChannelSyncService.formatSyncReport(result, loc), { append: true });
@@ -414,7 +414,7 @@ class AdminHandlers {
   }
 
   async runCloudPush(userId, loc, { forceEraseSafe = false } = {}) {
-    await this.bs.sendMessage(userId, t('admin.cloud.syncing', null, loc), {}, { noNav: true });
+    await this.bs.sendMessage(userId, t('admin.cloud.syncing', null, loc), {}, { noNav: true, transient: true });
     try {
       const result = await SyncService.syncNow('push', { force: forceEraseSafe });
       if (result.needsConfirm) {

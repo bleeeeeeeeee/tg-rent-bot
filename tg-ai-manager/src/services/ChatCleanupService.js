@@ -2,7 +2,7 @@ const UserSettingsService = require('./UserSettingsService');
 
 class ChatCleanupService {
   constructor() {
-    /** @type {Map<number, { ephemeral: number[], pinned: Set<number> }>} */
+    /** @type {Map<number, { ephemeral: number[], transient: number[], pinned: Set<number> }>} */
     this.stacks = new Map();
     this.replyKeyboardReady = new Set();
   }
@@ -10,7 +10,7 @@ class ChatCleanupService {
   _stack(chatId) {
     const id = Number(chatId);
     if (!this.stacks.has(id)) {
-      this.stacks.set(id, { ephemeral: [], pinned: new Set() });
+      this.stacks.set(id, { ephemeral: [], transient: [], pinned: new Set() });
     }
     return this.stacks.get(id);
   }
@@ -21,15 +21,20 @@ class ChatCleanupService {
     this.replyKeyboardReady.delete(id);
   }
 
-  trackBotMessage(chatId, messageId, { pinned = false } = {}) {
+  trackBotMessage(chatId, messageId, { pinned = false, transient = false } = {}) {
     if (!messageId) return;
     const stack = this._stack(chatId);
     if (pinned) {
       stack.pinned.add(messageId);
       stack.ephemeral = stack.ephemeral.filter((id) => id !== messageId);
+      stack.transient = stack.transient.filter((id) => id !== messageId);
       return;
     }
     if (stack.pinned.has(messageId)) return;
+    if (transient) {
+      if (!stack.transient.includes(messageId)) stack.transient.push(messageId);
+      return;
+    }
     if (!stack.ephemeral.includes(messageId)) {
       stack.ephemeral.push(messageId);
     }
@@ -63,6 +68,7 @@ class ChatCleanupService {
       if (stack) {
         stack.pinned.delete(messageId);
         stack.ephemeral = stack.ephemeral.filter((id) => id !== messageId);
+        stack.transient = stack.transient.filter((id) => id !== messageId);
       }
     }
 
@@ -71,6 +77,14 @@ class ChatCleanupService {
 
   async _chatCleanupEnabled(chatId) {
     return UserSettingsService.getChatCleanup(chatId);
+  }
+
+  async flushTransient(bot, chatId) {
+    const stack = this.stacks.get(Number(chatId));
+    if (!stack?.transient?.length) return 0;
+    const ids = [...stack.transient];
+    stack.transient = [];
+    return this.deleteMessages(bot, chatId, ids, { keepPinned: false });
   }
 
   async flushBotMessages(bot, chatId, { except = [] } = {}) {
@@ -123,6 +137,7 @@ class ChatCleanupService {
     if (stack) {
       stack.pinned.delete(messageId);
       stack.ephemeral = stack.ephemeral.filter((id) => id !== messageId);
+      stack.transient = stack.transient.filter((id) => id !== messageId);
     }
     try {
       await bot.deleteMessage(chatId, messageId);

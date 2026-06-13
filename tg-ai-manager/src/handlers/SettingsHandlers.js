@@ -502,7 +502,7 @@ class SettingsHandlers {
         return this.sendCustomAiPrompt(userId, 'settings.ai.custom.model_prompt', { mode: 'waiting_custom_ai_model' });
       }
       const draft = state.customAi || {};
-      await this.bs.sendMessage(userId, t('settings.ai.custom.testing', null, loc), {}, { noNav: true });
+      await this.bs.sendMessage(userId, t('settings.ai.custom.testing', null, loc), {}, { noNav: true, transient: true });
       try {
         const row = await SettingsService.addCustomProvider({
           label: draft.label,
@@ -590,7 +590,7 @@ class SettingsHandlers {
         patch.baseUrl = value;
       }
       if (state.mode === 'waiting_custom_ai_edit_model') patch.defaultModel = value;
-      await this.bs.sendMessage(userId, t('settings.ai.custom.testing', null, loc), {}, { noNav: true });
+      await this.bs.sendMessage(userId, t('settings.ai.custom.testing', null, loc), {}, { noNav: true, transient: true });
       try {
         const updated = await SettingsService.updateCustomProvider(providerId, patch);
         await AiProviderRegistry.refreshCustom();
@@ -620,7 +620,7 @@ class SettingsHandlers {
       }
 
       await ChatCleanupService.deleteUserMessage(this.bot, msg.chat.id, msg.message_id);
-      await this.bs.sendMessage(userId, '⏳ Проверяю подключение, подождите…');
+      await this.bs.sendMessage(userId, '⏳ Проверяю подключение, подождите…', {}, { noNav: true, transient: true });
 
       const fields = { [state.secretField]: value };
       await SecretsService.setProviderSecret(state.providerId, fields);

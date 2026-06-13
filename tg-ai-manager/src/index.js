@@ -12,7 +12,8 @@ const {
   STORAGE_BACKEND,
   BOT_MODE,
   WEBHOOK_URL,
-  WEBHOOK_SECRET
+  WEBHOOK_SECRET,
+  OLLAMA_BASE_URL
 } = require('./config');
 const {
   resolveWebhookMode,
@@ -58,6 +59,9 @@ process.on('SIGINT', () => shutdown('SIGINT'));
     console.log(`   OWNER_TELEGRAM_ID: ${OWNER_TELEGRAM_ID || ADMIN_ID}`);
     console.log(`   CHANNEL_ID: ${CHANNEL_ID}`);
     console.log(`   STORAGE_BACKEND: ${STORAGE_BACKEND}`);
+    if (OLLAMA_BASE_URL) {
+      console.log(`   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL.replace(/\/$/, '')}`);
+    }
 
     const { useWebhook, url: webhookUrl } = resolveWebhookMode({
       BOT_MODE,
@@ -104,6 +108,11 @@ process.on('SIGINT', () => shutdown('SIGINT'));
     await SecretsService.seedFromEnv();
     await AccessService.init();
     await AiProviderRegistry.refreshCustom();
+
+    if (OLLAMA_BASE_URL) {
+      const OllamaBootstrap = require('./services/OllamaBootstrap');
+      await OllamaBootstrap.checkOnStartup();
+    }
 
     botService = new BotService(PostRepository, { usePolling: !useWebhook });
 

@@ -299,7 +299,7 @@ class HistoryHandlers {
 
     let preamble = null;
     if (!silent) {
-      await this.bs.sendMessage(userId, t('history.sync.running', null, loc), {}, { noNav: true });
+      await this.bs.sendMessage(userId, t('history.sync.running', null, loc), {}, { noNav: true, transient: true });
     }
 
     try {

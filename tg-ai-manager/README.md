@@ -281,7 +281,35 @@ WEBHOOK_SECRET=случайная-длинная-строка
 5. Node 22 в Docker (нативный WebSocket для Supabase)
 6. **Один** инстанс на один `BOT_TOKEN` — не запускайте `npm start` на Mac одновременно с облаком
 
-**Ollama на Mac + бот в облаке:** нужен ngrok и `OLLAMA_ORIGINS=*`. Для 24/7 лучше OpenRouter/Groq.
+**Ollama в продакшене (без ngrok и Mac):**
+
+Mac + Northflank + ngrok — ненадёжно (нужен постоянно включённый Mac, туннель, в РБ ngrok часто без VPN). Правильно: **Ollama на том же сервере, что и бот**.
+
+**Вариант A — один VPS + Docker (рекомендуется для Ollama):**
+
+```bash
+docker compose up -d --build
+docker compose exec ollama ollama pull llama3.2
+```
+
+В `.env`: `BOT_MODE=webhook`, `WEBHOOK_URL=…`, Supabase. Compose уже задаёт `OLLAMA_BASE_URL=http://ollama:11434` — бот ходит в Ollama по внутренней сети Docker.
+
+**Вариант B — Northflank, два сервиса в одном проекте:**
+
+1. Сервис `ollama` — образ `ollama/ollama`, порт 11434, persistent volume.
+2. Сервис `manager` (бот) — переменные как сейчас **плюс**:
+   ```env
+   OLLAMA_BASE_URL=http://ollama:11434
+   OLLAMA_AUTO_ACTIVATE=true
+   OLLAMA_MODEL=llama3.2
+   ```
+3. Один раз в shell сервиса ollama: `ollama pull llama3.2`
+
+Имя хоста `ollama` — internal DNS Northflank между сервисами проекта (не публичный URL).
+
+**Вариант C — без Ollama в облаке:** Groq или OpenRouter — уже в боте, работают с Northflank без VPN.
+
+**Ollama на Mac + бот в облаке:** только через туннель (ngrok/Cloudflare). Для 24/7 не используйте.
 
 **Резервное копирование (cron):**
 

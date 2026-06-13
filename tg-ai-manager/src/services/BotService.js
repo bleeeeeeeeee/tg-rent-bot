@@ -339,9 +339,18 @@ class BotService {
       sendOpts = { ...sendOpts, noNav: options.noNav };
       delete options.noNav;
     }
-    const { append = false, pinned = false, track = true, noNav = false } = sendOpts;
+    if (options.transient !== undefined) {
+      sendOpts = { ...sendOpts, transient: options.transient };
+      delete options.transient;
+    }
+    const { append = false, pinned = false, track = true, noNav = false, transient = false } = sendOpts;
     const UserSettingsService = require('./UserSettingsService');
     const cleanup = await UserSettingsService.getChatCleanup(userId);
+
+    if (cleanup) {
+      await ChatCleanupService.flushTransient(this.bot, userId);
+    }
+
     const previousEphemeral = !append && cleanup ? ChatCleanupService.snapshotEphemeral(userId) : [];
 
     options.reply_markup = options.reply_markup || {};
@@ -364,7 +373,7 @@ class BotService {
     }
 
     if (track) {
-      ChatCleanupService.trackBotMessage(userId, msg.message_id, { pinned });
+      ChatCleanupService.trackBotMessage(userId, msg.message_id, { pinned, transient });
     }
 
     if (!append && cleanup && previousEphemeral.length) {

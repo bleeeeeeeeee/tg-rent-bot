@@ -22,4 +22,23 @@ describe('ChatCleanupService stack', () => {
     assert.deepEqual(ChatCleanupService.snapshotEphemeral(1).includes(200), false);
     ChatCleanupService.resetChat(1);
   });
+
+  it('removes transient status messages on the next bot reply', async () => {
+    const ChatCleanupService = require('../src/services/ChatCleanupService');
+    const deleted = [];
+    const bot = {
+      deleteMessage: async (_chatId, messageId) => {
+        deleted.push(messageId);
+      }
+    };
+
+    ChatCleanupService.resetChat(1);
+    ChatCleanupService.trackBotMessage(1, 50, { transient: true });
+    ChatCleanupService.trackBotMessage(1, 51);
+    await ChatCleanupService.flushTransient(bot, 1);
+
+    assert.deepEqual(deleted, [50]);
+    assert.deepEqual(ChatCleanupService.snapshotEphemeral(1), [51]);
+    ChatCleanupService.resetChat(1);
+  });
 });

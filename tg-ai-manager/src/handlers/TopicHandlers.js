@@ -87,7 +87,7 @@ class TopicHandlers {
 
     state.mode = 'topic_generating';
     stateManager.set(userId, state);
-    await this.bs.sendMessage(userId, t('topics.generating', null, loc), {}, { noNav: true });
+    await this.bs.sendMessage(userId, t('topics.generating', null, loc), {}, { noNav: true, transient: true });
 
     try {
       const result = await TopicIdeasService.generateTopics({
