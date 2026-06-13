@@ -66,6 +66,47 @@ class SettingsHandlers {
     );
   }
 
+  async showCustomAiEdit(userId, providerId) {
+    const provider = await SettingsService.getCustomProvider(providerId);
+    if (!provider) return this.showAi(userId);
+    const loc = await this.bs.locale(userId);
+    return this.bs.sendMessage(
+      userId,
+      `<b>${provider.label}</b>\n${provider.baseUrl}`,
+      { parse_mode: 'HTML', ...(await MenuService.getSettingsCustomAiEditMenu(provider.id, loc)) }
+    );
+  }
+
+  async handleCustomAiBack(userId) {
+    const state = stateManager.get(userId) || {};
+    const ret = state.settingsReturn || 'connect';
+    await this.bs.clearState(userId);
+    if (ret === 'connect') return this.showConnectProviders(userId);
+    if (ret === 'custom') {
+      const loc = await this.bs.locale(userId);
+      return this.bs.sendMessage(
+        userId,
+        `<b>${t('settings.ai.menu.custom', null, loc)}</b>`,
+        { parse_mode: 'HTML', ...(await MenuService.getSettingsAiCustomMenu(loc)) }
+      );
+    }
+    if (ret.startsWith('edit:')) {
+      return this.showCustomAiEdit(userId, ret.slice(5));
+    }
+    return this.showAi(userId);
+  }
+
+  async sendCustomAiPrompt(userId, textKey, statePatch = {}) {
+    const loc = await this.bs.locale(userId);
+    const prev = stateManager.get(userId) || {};
+    stateManager.set(userId, { ...prev, ...statePatch });
+    return this.bs.sendMessage(
+      userId,
+      t(textKey, null, loc),
+      await MenuService.getSettingsCustomAiWizardNav(loc)
+    );
+  }
+
   async showAi(userId, sendOpts = {}) {
     const active = await SettingsService.getActiveProvider();
     const autoEnrich = await SettingsService.getAutoEnrich();
@@ -217,6 +258,10 @@ class SettingsHandlers {
       return this.showAiActive(userId);
     }
 
+    if (data === 'settings_ai_custom_back') {
+      return this.handleCustomAiBack(userId);
+    }
+
     if (data === 'settings_ai_custom') {
       const loc = await this.bs.locale(userId);
       return this.bs.sendMessage(
@@ -235,16 +280,30 @@ class SettingsHandlers {
     }
 
     if (data === 'settings_ai_custom_start') {
-      stateManager.set(userId, { mode: 'waiting_custom_ai_label', customAi: {} });
-      const loc = await this.bs.locale(userId);
-      return this.bs.sendMessage(userId, t('settings.ai.custom.label_prompt', null, loc));
+      return this.sendCustomAiPrompt(userId, 'settings.ai.custom.label_prompt', {
+        mode: 'waiting_custom_ai_label',
+        customAi: {},
+        settingsReturn: 'connect'
+      });
+    }
+
+    if (data === 'settings_ai_custom_add') {
+      return this.sendCustomAiPrompt(userId, 'settings.ai.custom.label_prompt', {
+        mode: 'waiting_custom_ai_label',
+        customAi: {},
+        settingsReturn: 'custom'
+      });
     }
 
     if (data === 'settings_ai_custom_manage') {
       const loc = await this.bs.locale(userId);
       const providers = await SettingsService.getCustomProviders();
       if (!providers.length) {
-        return this.bs.sendMessage(userId, t('settings.ai.custom.label_prompt', null, loc));
+        return this.sendCustomAiPrompt(userId, 'settings.ai.custom.label_prompt', {
+          mode: 'waiting_custom_ai_label',
+          customAi: {},
+          settingsReturn: 'custom'
+        });
       }
       return this.bs.sendMessage(
         userId,
@@ -255,14 +314,7 @@ class SettingsHandlers {
 
     const customEditMatch = data.match(/^settings_ai_custom_edit_(.+)$/);
     if (customEditMatch) {
-      const provider = await SettingsService.getCustomProvider(customEditMatch[1]);
-      if (!provider) return this.showAi(userId);
-      const loc = await this.bs.locale(userId);
-      return this.bs.sendMessage(
-        userId,
-        `<b>${provider.label}</b>\n${provider.baseUrl}`,
-        { parse_mode: 'HTML', ...(await MenuService.getSettingsCustomAiEditMenu(provider.id, loc)) }
-      );
+      return this.showCustomAiEdit(userId, customEditMatch[1]);
     }
 
     const editFieldMatch = data.match(/^settings_ai_edit_(.+)_(label|url|key|model)$/);
@@ -270,21 +322,23 @@ class SettingsHandlers {
       const [, providerId, field] = editFieldMatch;
       const provider = await SettingsService.getCustomProvider(providerId);
       if (!provider) return this.showAi(userId);
-      const loc = await this.bs.locale(userId);
       const modeMap = {
         label: 'waiting_custom_ai_edit_label',
         url: 'waiting_custom_ai_edit_url',
         key: 'waiting_custom_ai_edit_key',
         model: 'waiting_custom_ai_edit_model'
       };
-      stateManager.set(userId, { mode: modeMap[field], customAiEdit: { providerId } });
       const promptKey = {
         label: 'settings.ai.custom.label_prompt',
         url: 'settings.ai.custom.url_prompt',
         key: 'settings.ai.custom.key_prompt',
         model: 'settings.ai.custom.model_prompt'
       }[field];
-      return this.bs.sendMessage(userId, t(promptKey, null, loc));
+      return this.sendCustomAiPrompt(userId, promptKey, {
+        mode: modeMap[field],
+        customAiEdit: { providerId },
+        settingsReturn: `edit:${providerId}`
+      });
     }
 
     if (data === 'settings_toggle_cleanup') {
@@ -404,45 +458,51 @@ class SettingsHandlers {
     if (!SETTINGS_MESSAGE_MODES.has(state.mode)) return false;
 
     if (state.mode === 'waiting_custom_ai_label') {
-      const loc = await this.bs.locale(userId);
       const label = msg.text?.trim();
-      if (!label) return this.bs.sendMessage(userId, t('settings.ai.custom.label_prompt', null, loc));
-      state.customAi = { label };
-      state.mode = 'waiting_custom_ai_url';
-      stateManager.set(userId, state);
-      return this.bs.sendMessage(userId, t('settings.ai.custom.url_prompt', null, loc));
+      if (!label) {
+        return this.sendCustomAiPrompt(userId, 'settings.ai.custom.label_prompt', { mode: 'waiting_custom_ai_label' });
+      }
+      return this.sendCustomAiPrompt(userId, 'settings.ai.custom.url_prompt', {
+        mode: 'waiting_custom_ai_url',
+        customAi: { label }
+      });
     }
 
     if (state.mode === 'waiting_custom_ai_url') {
-      const loc = await this.bs.locale(userId);
       const baseUrl = msg.text?.trim();
       if (!baseUrl || !/^https?:\/\/.+/i.test(baseUrl)) {
-        return this.bs.sendMessage(userId, t('settings.ai.custom.url_prompt', null, loc));
+        return this.sendCustomAiPrompt(userId, 'settings.ai.custom.url_prompt', { mode: 'waiting_custom_ai_url' });
       }
-      state.customAi.baseUrl = baseUrl;
-      state.mode = 'waiting_custom_ai_key';
-      stateManager.set(userId, state);
-      return this.bs.sendMessage(userId, t('settings.ai.custom.key_prompt', null, loc));
+      const customAi = { ...(state.customAi || {}), baseUrl };
+      return this.sendCustomAiPrompt(userId, 'settings.ai.custom.key_prompt', {
+        mode: 'waiting_custom_ai_key',
+        customAi
+      });
     }
 
     if (state.mode === 'waiting_custom_ai_key') {
-      const loc = await this.bs.locale(userId);
       let key = msg.text?.trim();
       if (key === '-') key = '';
       await ChatCleanupService.deleteUserMessage(this.bot, msg.chat.id, msg.message_id);
-      state.customAi.apiKey = key;
-      state.customAi.requiresKey = Boolean(key);
-      state.mode = 'waiting_custom_ai_model';
-      stateManager.set(userId, state);
-      return this.bs.sendMessage(userId, t('settings.ai.custom.model_prompt', null, loc));
+      const customAi = {
+        ...(state.customAi || {}),
+        apiKey: key,
+        requiresKey: Boolean(key)
+      };
+      return this.sendCustomAiPrompt(userId, 'settings.ai.custom.model_prompt', {
+        mode: 'waiting_custom_ai_model',
+        customAi
+      });
     }
 
     if (state.mode === 'waiting_custom_ai_model') {
       const loc = await this.bs.locale(userId);
       const model = msg.text?.trim();
-      if (!model) return this.bs.sendMessage(userId, t('settings.ai.custom.model_prompt', null, loc));
+      if (!model) {
+        return this.sendCustomAiPrompt(userId, 'settings.ai.custom.model_prompt', { mode: 'waiting_custom_ai_model' });
+      }
       const draft = state.customAi || {};
-      await this.bs.sendMessage(userId, t('settings.ai.custom.testing', null, loc));
+      await this.bs.sendMessage(userId, t('settings.ai.custom.testing', null, loc), {}, { noNav: true });
       try {
         const row = await SettingsService.addCustomProvider({
           label: draft.label,
@@ -486,9 +546,13 @@ class SettingsHandlers {
         return this.showAi(userId);
       }
       const value = msg.text?.trim();
+      const editReturn = { customAiEdit: { providerId }, settingsReturn: `edit:${providerId}` };
       if (state.mode === 'waiting_custom_ai_edit_key') {
         if (value === undefined || value === '') {
-          return this.bs.sendMessage(userId, t('settings.ai.custom.key_prompt', null, loc));
+          return this.sendCustomAiPrompt(userId, 'settings.ai.custom.key_prompt', {
+            mode: state.mode,
+            ...editReturn
+          });
         }
         let key = value === '-' ? '' : value;
         await ChatCleanupService.deleteUserMessage(this.bot, msg.chat.id, msg.message_id);
@@ -512,18 +576,21 @@ class SettingsHandlers {
           waiting_custom_ai_edit_url: 'settings.ai.custom.url_prompt',
           waiting_custom_ai_edit_model: 'settings.ai.custom.model_prompt'
         }[state.mode];
-        return this.bs.sendMessage(userId, t(promptKey, null, loc));
+        return this.sendCustomAiPrompt(userId, promptKey, { mode: state.mode, ...editReturn });
       }
       const patch = {};
       if (state.mode === 'waiting_custom_ai_edit_label') patch.label = value;
       if (state.mode === 'waiting_custom_ai_edit_url') {
         if (!/^https?:\/\/.+/i.test(value)) {
-          return this.bs.sendMessage(userId, t('settings.ai.custom.url_prompt', null, loc));
+          return this.sendCustomAiPrompt(userId, 'settings.ai.custom.url_prompt', {
+            mode: state.mode,
+            ...editReturn
+          });
         }
         patch.baseUrl = value;
       }
       if (state.mode === 'waiting_custom_ai_edit_model') patch.defaultModel = value;
-      await this.bs.sendMessage(userId, t('settings.ai.custom.testing', null, loc));
+      await this.bs.sendMessage(userId, t('settings.ai.custom.testing', null, loc), {}, { noNav: true });
       try {
         const updated = await SettingsService.updateCustomProvider(providerId, patch);
         await AiProviderRegistry.refreshCustom();

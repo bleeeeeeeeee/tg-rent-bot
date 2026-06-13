@@ -1041,6 +1041,18 @@ class MenuService {
         return { reply_markup: { inline_keyboard: keyboard } };
     }
 
+    static async getSettingsCustomAiWizardNav(locale = null) {
+        const loc = locale || await this._loc();
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai_custom_back' }],
+                    [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+                ]
+            }
+        };
+    }
+
     static async getSettingsCustomAiManageMenu(locale = null) {
         const SettingsService = require('./SettingsService');
         const loc = locale || await this._loc();
@@ -1050,9 +1062,9 @@ class MenuService {
             callback_data: `settings_ai_custom_edit_${p.id}`
         }]);
         keyboard.push(
-            [{ text: '➕ ' + this._t('settings.ai.custom_api', loc), callback_data: 'settings_ai_custom_start' }],
-            [{ text: this._t('common.back', loc), callback_data: 'settings_ai_custom' }],
-            [{ text: this._t('common.main_menu', loc), callback_data: 'cancel' }]
+            [{ text: '➕ ' + this._t('settings.ai.custom_api', loc), callback_data: 'settings_ai_custom_add' }],
+            [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai' }],
+            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }

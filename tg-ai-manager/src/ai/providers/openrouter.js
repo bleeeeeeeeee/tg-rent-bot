@@ -3,6 +3,8 @@ const OPENROUTER_HEADERS = {
   'X-Title': 'TG AI Manager'
 };
 
+const KEY_URL = 'https://openrouter.ai/api/v1/key';
+
 const DEPRECATED_MODELS = new Set(['google/gemma-2-9b-it:free']);
 
 const DEFAULT_MODEL = 'meta-llama/llama-3.2-3b-instruct:free';
@@ -10,6 +12,36 @@ const DEFAULT_MODEL = 'meta-llama/llama-3.2-3b-instruct:free';
 function resolveModel(model) {
   if (!model || DEPRECATED_MODELS.has(model)) return DEFAULT_MODEL;
   return model;
+}
+
+async function validateOpenRouterKey(apiKey) {
+  const res = await fetch(KEY_URL, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      ...OPENROUTER_HEADERS
+    }
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('Invalid API key');
+  }
+  if (res.status === 402) {
+    throw new Error('Insufficient credits on OpenRouter account');
+  }
+  if (res.status === 429) {
+    throw new Error('OpenRouter rate limit during key check — retry in a minute');
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(body.slice(0, 200) || `OpenRouter HTTP ${res.status}`);
+  }
+
+  const payload = await res.json().catch(() => null);
+  if (!payload?.data?.label) {
+    throw new Error('Unexpected OpenRouter key response');
+  }
+  return true;
 }
 
 module.exports = {
@@ -29,13 +61,9 @@ module.exports = {
   },
 
   async validateConfig(secrets, model) {
-    const { pingOpenAICompatible } = require('../openaiCompatible');
-    return pingOpenAICompatible({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey: secrets.apiKey,
-      model: resolveModel(model),
-      extraHeaders: OPENROUTER_HEADERS
-    });
+    const apiKey = secrets?.apiKey?.trim();
+    if (!apiKey) throw new Error('API key required');
+    return validateOpenRouterKey(apiKey);
   },
 
   async summarize(text, { model, secrets }) {
@@ -61,3 +89,7 @@ module.exports = {
     });
   }
 };
+
+module.exports.validateOpenRouterKey = validateOpenRouterKey;
+module.exports.OPENROUTER_HEADERS = OPENROUTER_HEADERS;
+module.exports.resolveModel = resolveModel;

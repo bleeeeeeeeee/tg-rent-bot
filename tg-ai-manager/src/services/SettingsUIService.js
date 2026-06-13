@@ -114,10 +114,15 @@ class SettingsUIService {
     const status = err?.status || err?.response?.status;
     const msg = err?.message || String(err);
 
+    if (status === 402 || /402|insufficient credits|payment required/i.test(msg)) {
+      return loc === 'en'
+        ? '❌ <b>No OpenRouter credits.</b> Add balance at openrouter.ai or pick a free model.'
+        : '❌ <b>Недостаточно кредитов OpenRouter.</b> Пополните баланс на openrouter.ai или выберите free-модель.';
+    }
     if (status === 429 || /429|rate limit|too many requests/i.test(msg)) {
       return loc === 'en'
-        ? '⏳ <b>Service overloaded</b> (rate limit). Wait 1–2 min and retry.'
-        : '⏳ <b>Сервис временно перегружен</b> (лимит запросов). Подождите 1–2 минуты.';
+        ? '⏳ <b>Rate limit.</b> Free models are shared — wait 1–2 min or switch model in AI settings.'
+        : '⏳ <b>Лимит запросов.</b> Free-модели общие для всех — подождите 1–2 мин или смените модель в настройках ИИ.';
     }
     if (status === 404 || /404|no endpoints found/i.test(msg)) {
       return loc === 'en'
