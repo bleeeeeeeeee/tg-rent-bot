@@ -6,6 +6,10 @@ const {
   inferAlbumPrimaryId,
   isEmptyPost
 } = require('../utils/albumPosts');
+const {
+  normalizeEditHistory,
+  appendEditSnapshot
+} = require('../utils/postEditHistory');
 
 const SCHEMA_VERSION = 3;
 
@@ -17,6 +21,7 @@ function normalizePost(raw) {
     id: Number(raw.id),
     post,
     postOriginal: raw.postOriginal ?? null,
+    editHistory: normalizeEditHistory(raw.editHistory),
     title: raw.title ?? raw['тема'] ?? '',
     mainIdea: raw.mainIdea ?? raw['главнаяМысль'] ?? '',
     tags: Array.isArray(raw.tags) ? raw.tags : [],
@@ -52,6 +57,7 @@ function createPostRecord({
     id: Number(id),
     post,
     postOriginal,
+    editHistory: [],
     title: '',
     mainIdea: '',
     tags: [],
@@ -312,21 +318,31 @@ class ExistingPosts {
       updates.replyTo = Number(updates.replyTo);
     }
 
+    if (updates.post !== undefined && existing.post !== updates.post) {
+      const mergedBefore = { ...existing, editHistory: normalizeEditHistory(existing.editHistory) };
+      updates.editHistory = appendEditSnapshot(mergedBefore, updates.editSource || 'sync');
+      if (!existing.postOriginal && existing.post) {
+        updates.postOriginal = existing.post;
+      }
+    }
+    delete updates.editSource;
+
     data.posts[idx] = normalizePost({ ...existing, ...updates });
     await this._write(data);
     return { post: data.posts[idx], action: 'updated' };
   }
 
-  static async applyEdit(messageId, postText, mediaInfo = null, editedAt = null) {
+  static async applyEdit(messageId, postText, mediaInfo = null, editedAt = null, { source = 'channel' } = {}) {
     const data = await this._read();
     const id = Number(messageId);
     const idx = (data.posts || []).findIndex((p) => p.id === id);
     const now = editedAt || new Date().toISOString();
+    const nextText = postText || '';
 
     if (idx === -1) {
       const post = createPostRecord({
         id,
-        postText,
+        postText: nextText,
         mediaInfo,
         lifecycleStatus: 'edited',
         editedAt: now
@@ -338,19 +354,26 @@ class ExistingPosts {
     }
 
     const existing = data.posts[idx];
+    if ((existing.post || '') === nextText) {
+      return existing;
+    }
+
     const updates = {
-      post: postText || '',
+      post: nextText,
       media: mediaInfo ?? existing.media,
       lifecycleStatus: 'edited',
       editedAt: now,
-      contentHash: computeContentHash(postText || '')
+      contentHash: computeContentHash(nextText)
     };
 
-    if (!existing.postOriginal && existing.post) {
-      updates.postOriginal = existing.post;
+    if (existing.post !== nextText) {
+      updates.editHistory = appendEditSnapshot(existing, source);
+      if (!existing.postOriginal && existing.post) {
+        updates.postOriginal = existing.post;
+      }
     }
 
-    data.posts[idx] = { ...existing, ...updates };
+    data.posts[idx] = { ...existing, ...updates, editHistory: updates.editHistory ?? existing.editHistory };
     await this._write(data);
     return data.posts[idx];
   }

@@ -1,6 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { BOT_TOKEN, ADMIN_ID, CHANNEL_ID, OWNER_TELEGRAM_ID } = require('../config');
 const PostService = require('./PostService');
+const ChannelPostService = require('./ChannelPostService');
 const DraftService = require('./DraftService');
 const MenuService = require('./MenuService');
 const stateManager = require('./StateManager');
@@ -49,6 +50,7 @@ const WORKFLOW_MODES = new Set([
   'waiting_custom_ai_edit_url',
   'waiting_custom_ai_edit_key',
   'waiting_custom_ai_edit_model',
+  'waiting_channel_edit_text',
   'topic_choose_count',
   'topic_generating',
   'topic_review',
@@ -56,24 +58,30 @@ const WORKFLOW_MODES = new Set([
 ]);
 
 class BotService {
-  constructor(postRepository) {
-    this.bot = new TelegramBot(BOT_TOKEN, {
-      polling: { interval: 300, autoStart: true, params: { timeout: 10 } }
-    });
+  constructor(postRepository, { usePolling = true } = {}) {
+    this.usePolling = usePolling;
+    const botOptions = usePolling
+      ? { polling: { interval: 300, autoStart: true, params: { timeout: 10 } } }
+      : { webHook: false };
 
-    this.bot.on('polling_error', (err) => {
-      const code = err?.response?.body?.error_code || err?.code;
-      const desc = err?.response?.body?.description || err?.message || String(err);
-      console.error('polling_error', desc);
-      if (code === 409 || /409|Conflict|getUpdates/i.test(desc)) {
-        console.error(
-          '[BotService] Конфликт токена: бот уже запущен в другом месте. Остановите локальный npm start или второй деплой.'
-        );
-      }
-    });
+    this.bot = new TelegramBot(BOT_TOKEN, botOptions);
+
+    if (usePolling) {
+      this.bot.on('polling_error', (err) => {
+        const code = err?.response?.body?.error_code || err?.code;
+        const desc = err?.response?.body?.description || err?.message || String(err);
+        console.error('polling_error', desc);
+        if (code === 409 || /409|Conflict|getUpdates/i.test(desc)) {
+          console.error(
+            '[BotService] Конфликт токена: бот уже запущен в другом месте. Остановите локальный npm start или второй деплой.'
+          );
+        }
+      });
+    }
     this.bot.on('webhook_error', (err) => console.error('webhook_error', err));
 
     this.postService = new PostService(this.bot);
+    this.channelPostService = new ChannelPostService(this.bot);
     this.postRepository = postRepository;
     this.adminHandlers = new AdminHandlers(this);
     this.wizardHandlers = new WizardHandlers(this);
@@ -784,6 +792,9 @@ class BotService {
 
     const settingsHandled = await this.settingsHandlers.handleMessageStep(userId, msg, state);
     if (settingsHandled !== false) return;
+
+    const historyHandled = await this.historyHandlers.handleMessageStep(userId, msg, state);
+    if (historyHandled !== false) return;
 
     if (state.mode === 'waiting_time') {
       const t = msg.text?.trim();

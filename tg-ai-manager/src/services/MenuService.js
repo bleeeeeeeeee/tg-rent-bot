@@ -555,32 +555,89 @@ class MenuService {
         };
     }
 
-    static getPublishedCardMenu(url, replyContext, ui = null) {
+    static getPublishedCardMenu(item, replyContext, ui = null, locale = null) {
         const style = ui || { useEmojis: true, navStyle: 'text' };
         const UiStyleService = require('./UiStyleService');
+        const loc = locale || 'ru';
+        const { t } = require('../i18n');
+        const { hasEditHistory } = require('../utils/postEditHistory');
         const rows = [];
+        const postId = item?.channelMessageId || item?.refId;
+        const deleted = item?.lifecycleStatus === 'deleted';
+        const canManage = !deleted && postId;
+
+        if (canManage) {
+            rows.push([
+                { text: this._L(style, '✏️', t('history.action.edit', null, loc)), callback_data: `history_pub_edit_${postId}` },
+                { text: this._L(style, '🗑', t('history.action.delete', null, loc)), callback_data: `history_pub_delete_${postId}` }
+            ]);
+        }
+
+        if (hasEditHistory(item) || item?.editCount > 0 || item?.postOriginal) {
+            rows.push([{
+                text: this._L(style, '📜', t('history.action.edits', null, loc)),
+                callback_data: `history_pub_edits_${postId}`
+            }]);
+        }
+
+        if (item?.preview?.trim()) {
+            rows.push([{
+                text: this._L(style, '📋', t('history.action.copy_text', null, loc)),
+                callback_data: `history_pub_text_${postId}`
+            }]);
+        }
 
         if (replyContext?.post?.replyTo) {
             rows.push([{
-                text: this._L(style, '↩️', `К посту #${replyContext.post.replyTo}`),
+                text: this._L(style, '↩️', `#${replyContext.post.replyTo}`),
                 callback_data: `history_pub_${replyContext.post.replyTo}`
             }]);
         }
 
         if (replyContext?.children?.length) {
             const childRows = replyContext.children.slice(0, 5).map((c) => ([{
-                text: this._L(style, '💬', `Ответ #${c.id}`),
+                text: this._L(style, '💬', `#${c.id}`),
                 callback_data: `history_pub_${c.id}`
             }]));
             rows.push(...childRows);
         }
 
-        if (url && replyContext?.post?.lifecycleStatus !== 'deleted') {
-            rows.push([{ text: this._L(style, '🔗', 'Открыть в канале'), url }]);
+        if (item?.channelUrl && !deleted) {
+            rows.push([{ text: this._L(style, '🔗', t('history.action.open', null, loc)), url: item.channelUrl }]);
         }
 
-        rows.push([{ text: UiStyleService.backLabel(style, 'Назад'), callback_data: 'history_back' }]);
+        rows.push([{ text: UiStyleService.backLabel(style, t('common.back', null, loc)), callback_data: 'history_back' }]);
         return { reply_markup: { inline_keyboard: rows } };
+    }
+
+    static getPublishedDeleteConfirmMenu(postId, ui = null, locale = null) {
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const UiStyleService = require('./UiStyleService');
+        const loc = locale || 'ru';
+        const { t } = require('../i18n');
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: this._L(style, '🗑', t('history.action.delete_confirm', null, loc)), callback_data: `history_pub_delete_ok_${postId}` }],
+                    [{ text: UiStyleService.backLabel(style, t('common.back', null, loc)), callback_data: `history_pub_${postId}` }]
+                ]
+            }
+        };
+    }
+
+    static getEditHistoryMenu(postId, ui = null, locale = null) {
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const UiStyleService = require('./UiStyleService');
+        const loc = locale || 'ru';
+        const { t } = require('../i18n');
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: UiStyleService.backLabel(style, t('common.back', null, loc)), callback_data: `history_pub_${postId}` }],
+                    [{ text: UiStyleService.backLabel(style), callback_data: 'history_back' }]
+                ]
+            }
+        };
     }
 
     static async getSettingsRootMenu(ui = null, locale = null) {

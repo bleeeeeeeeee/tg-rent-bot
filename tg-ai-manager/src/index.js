@@ -3,8 +3,23 @@ const PostRepository = require('./services/PostRepository');
 const SchedulerService = require('./services/SchedulerService');
 const AccessService = require('./services/AccessService');
 const SyncService = require('./services/SyncService');
-const { startHealthServer, stopHealthServer } = require('./health');
-const { CHANNEL_ID, ADMIN_ID, OWNER_TELEGRAM_ID, BOT_TOKEN, STORAGE_BACKEND } = require('./config');
+const { startHealthServer, stopHealthServer, configureTelegramWebhook } = require('./health');
+const {
+  CHANNEL_ID,
+  ADMIN_ID,
+  OWNER_TELEGRAM_ID,
+  BOT_TOKEN,
+  STORAGE_BACKEND,
+  BOT_MODE,
+  WEBHOOK_URL,
+  WEBHOOK_SECRET
+} = require('./config');
+const {
+  resolveWebhookMode,
+  parseWebhookUrl,
+  registerTelegramWebhook,
+  unregisterTelegramWebhook
+} = require('./telegramWebhook');
 const ExistingPosts = require('./services/ExistingPosts');
 const ChannelSyncService = require('./services/ChannelSyncService');
 const SecretsService = require('./services/SecretsService');
@@ -20,8 +35,10 @@ process.on('unhandledRejection', (err) => console.error('unhandledRejection', er
 async function shutdown(signal) {
   console.log(`\n⏹ ${signal} — останавливаю бота…`);
   try {
-    if (botService?.bot) {
+    if (botService?.usePolling) {
       await botService.bot.stopPolling();
+    } else if (botService?.bot) {
+      await unregisterTelegramWebhook(botService.bot);
     }
     await stopHealthServer();
   } catch (err) {
@@ -42,6 +59,15 @@ process.on('SIGINT', () => shutdown('SIGINT'));
     console.log(`   CHANNEL_ID: ${CHANNEL_ID}`);
     console.log(`   STORAGE_BACKEND: ${STORAGE_BACKEND}`);
 
+    const { useWebhook, url: webhookUrl } = resolveWebhookMode({
+      BOT_MODE,
+      WEBHOOK_URL
+    });
+    console.log(`   BOT_MODE: ${useWebhook ? 'webhook' : 'polling'}`);
+    if (useWebhook) {
+      console.log(`   WEBHOOK_URL: ${webhookUrl || '(missing!)'}`);
+    }
+
     if (!BOT_TOKEN?.trim()) {
       console.error('\n❌ BOT_TOKEN не задан.');
       console.error('   На Northflank: сервис → Variables → Runtime → добавьте BOT_TOKEN и остальные переменные.');
@@ -60,6 +86,18 @@ process.on('SIGINT', () => shutdown('SIGINT'));
       console.error('\n❌ STORAGE_BACKEND=supabase, но нет SUPABASE_URL или SUPABASE_SERVICE_KEY.\n');
       process.exit(1);
     }
+    if (useWebhook && !webhookUrl) {
+      console.error('\n❌ Webhook mode: задайте WEBHOOK_URL (полный HTTPS URL, например https://app.example.com/telegram/webhook).\n');
+      process.exit(1);
+    }
+    if (useWebhook && process.env.HEALTH_PORT === '0') {
+      console.error('\n❌ Webhook mode: HEALTH_PORT=0 отключает HTTP-сервер — webhook не будет принимать апдейты.\n');
+      process.exit(1);
+    }
+
+    if (process.env.HEALTH_PORT !== '0') {
+      startHealthServer();
+    }
 
     await ExistingPosts.migrateSchema();
     await SecretsService.seedFromEnv();
@@ -67,8 +105,15 @@ process.on('SIGINT', () => shutdown('SIGINT'));
     await AiProviderRegistry.refreshCustom();
     await SyncService.init();
 
-    if (process.env.HEALTH_PORT !== '0') {
-      startHealthServer();
+    botService = new BotService(PostRepository, { usePolling: !useWebhook });
+
+    if (useWebhook) {
+      const { fullUrl, path } = parseWebhookUrl(webhookUrl);
+      configureTelegramWebhook({
+        bot: botService.bot,
+        path,
+        secret: WEBHOOK_SECRET
+      });
     }
 
     const settings = await SettingsService.getAll();
@@ -97,8 +142,14 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 
     console.log('\nMode: channel monitoring enabled 🔄\n');
 
-    botService = new BotService(PostRepository);
-    console.log('✅ Telegram polling active\n');
+    if (useWebhook) {
+      const { fullUrl } = parseWebhookUrl(webhookUrl);
+      await registerTelegramWebhook(botService.bot, fullUrl, WEBHOOK_SECRET);
+      console.log(`✅ Telegram webhook registered: ${fullUrl}\n`);
+    } else {
+      console.log('✅ Telegram polling active\n');
+    }
+
     scheduler = new SchedulerService(botService.bot, PostRepository, botService.postService);
     scheduler.start();
   } catch (err) {

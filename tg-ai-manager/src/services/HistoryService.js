@@ -3,6 +3,7 @@ const PostRepository = require('./PostRepository');
 const PostGraphService = require('./PostGraphService');
 const { shouldHideFromList, getAlbumParts, countAlbumMedia, isEmptyPost } = require('../utils/albumPosts');
 const { buildPostUrl } = require('../utils/channelUrl');
+const { countEdits, buildEditTimeline, hasEditHistory } = require('../utils/postEditHistory');
 const SettingsService = require('./SettingsService');
 const { t } = require('../i18n');
 
@@ -98,6 +99,8 @@ class HistoryService {
       editedAt: p.editedAt,
       deletedAt: p.deletedAt,
       postOriginal: p.postOriginal,
+      editHistory: p.editHistory,
+      editCount: countEdits(p),
       buttonLabel: this._buildButtonLabel('published', p.deletedAt || p.added, p, timezone)
     }));
   }
@@ -126,6 +129,8 @@ class HistoryService {
       editedAt: p.editedAt,
       deletedAt: p.deletedAt,
       postOriginal: p.postOriginal,
+      editHistory: p.editHistory,
+      editCount: countEdits(p),
       buttonLabel: this._buildButtonLabel('published', p.added, p, timezone)
     }));
   }
@@ -230,6 +235,8 @@ class HistoryService {
         editedAt: p.editedAt,
         deletedAt: p.deletedAt,
         postOriginal: p.postOriginal,
+        editHistory: p.editHistory,
+        editCount: countEdits(p),
         albumParts,
         albumMediaCount: countAlbumMedia(p, allPosts),
         replyContext
@@ -274,13 +281,15 @@ class HistoryService {
     );
   }
 
-  static _formatLifecycleBlock(item, timezone) {
+  static _formatLifecycleBlock(item, timezone, locale = 'ru') {
     const lines = [];
     if (item.lifecycleStatus === 'edited') {
-      lines.push(`✏️ <b>Изменён</b> · ${this.formatDate(item.editedAt, timezone)}`);
+      const edits = item.editCount || countEdits(item);
+      const suffix = edits > 0 ? ` · ${t('history.card.edits_count', { count: edits }, locale)}` : '';
+      lines.push(`✏️ <b>${t('history.card.edited', null, locale)}</b>${suffix} · ${this.formatDate(item.editedAt, timezone)}`);
     }
     if (item.lifecycleStatus === 'deleted') {
-      lines.push(`🗑 <b>Удалён из канала</b> · ${this.formatDate(item.deletedAt, timezone)}`);
+      lines.push(`🗑 <b>${t('history.card.deleted', null, locale)}</b> · ${this.formatDate(item.deletedAt, timezone)}`);
     }
     return lines;
   }
@@ -320,16 +329,17 @@ class HistoryService {
     return lines;
   }
 
-  static async formatPublishedCard(item) {
+  static async formatPublishedCard(item, locale = null) {
+    const loc = locale || (await SettingsService.getLocale());
     const timezone = await SettingsService.getTimezone();
     const statusIcon =
       item.lifecycleStatus === 'deleted' ? '🗑' : item.lifecycleStatus === 'edited' ? '✏️' : '✅';
-    const lines = [`${statusIcon} <b>Пост #${item.channelMessageId}</b>`, ''];
+    const lines = [`${statusIcon} <b>${t('history.card.post', { id: item.channelMessageId }, loc)}</b>`, ''];
 
-    lines.push(...this._formatLifecycleBlock(item, timezone));
+    lines.push(...this._formatLifecycleBlock(item, timezone, loc));
 
     if (item.title) lines.push(`<b>${this._escapeHtml(item.title)}</b>`);
-    if (item.mainIdea) lines.push(`💡 Суть: ${this._escapeHtml(item.mainIdea)}`);
+    if (item.mainIdea) lines.push(`💡 ${t('history.card.main_idea', null, loc)}: ${this._escapeHtml(item.mainIdea)}`);
 
     const aiLines = this._formatAiBlock(item);
     if (aiLines.length) {
@@ -337,11 +347,11 @@ class HistoryService {
       lines.push(...aiLines);
     }
 
-    lines.push('', `📅 Добавлен: ${this.formatDate(item.sortAt, timezone)}`);
-    if (item.media) lines.push(`🖼 Медиа: ${item.media.type}`);
+    lines.push('', `📅 ${t('history.card.added', null, loc)}: ${this.formatDate(item.sortAt, timezone)}`);
+    if (item.media) lines.push(`🖼 ${t('history.card.media', null, loc)}: ${item.media.type}`);
     if (item.albumMediaCount > 1) {
       const ids = [item.channelMessageId, ...(item.albumParts || []).map((p) => p.id)];
-      lines.push(`🖼 Альбом: ${item.albumMediaCount} файлов (${ids.map((id) => `#${id}`).join(', ')})`);
+      lines.push(`🖼 ${t('history.card.album', { count: item.albumMediaCount }, loc)} (${ids.map((id) => `#${id}`).join(', ')})`);
     }
 
     const replyLines = this._formatReplyBlock(item);
@@ -354,18 +364,71 @@ class HistoryService {
     if (item.lifecycleStatus === 'deleted') {
       lines.push('<s>' + (item.preview?.trim()
         ? this._escapeHtml(item.preview)
-        : '<i>Без текста</i>') + '</s>');
+        : `<i>${t('history.no_text', null, loc)}</i>`) + '</s>');
     } else {
       lines.push(
-        item.preview?.trim() ? this._escapeHtml(item.preview) : '<i>Без текста</i>'
+        item.preview?.trim() ? this._escapeHtml(item.preview) : `<i>${t('history.no_text', null, loc)}</i>`
       );
     }
 
-    if (item.postOriginal && item.lifecycleStatus === 'edited') {
-      lines.push('', `<i>Было:</i> ${this._escapeHtml(this.truncatePreview(item.postOriginal, 300))}`);
+    if (hasEditHistory(item) && item.postOriginal && item.postOriginal !== item.preview) {
+      lines.push(
+        '',
+        `<i>${t('history.card.was', null, loc)}:</i> ${this._escapeHtml(this.truncatePreview(item.postOriginal, 300, loc))}`
+      );
     }
 
     return lines.join('\n');
+  }
+
+  static async formatEditHistoryCard(item, { versionIndex = null } = {}, locale = null) {
+    const loc = locale || (await SettingsService.getLocale());
+    const timezone = await SettingsService.getTimezone();
+    const timeline = buildEditTimeline({
+      post: item.preview,
+      postOriginal: item.postOriginal,
+      editHistory: item.editHistory,
+      added: item.sortAt,
+      editedAt: item.editedAt,
+      lifecycleStatus: item.lifecycleStatus
+    });
+
+    const lines = [
+      `📜 <b>${t('history.edits.title', { id: item.channelMessageId }, loc)}</b>`,
+      '',
+      t('history.edits.count', { count: Math.max(0, timeline.length - 1) }, loc),
+      ''
+    ];
+
+    timeline.forEach((entry, idx) => {
+      const label =
+        entry.kind === 'original'
+          ? t('history.edits.original', null, loc)
+          : entry.kind === 'current'
+            ? t('history.edits.current', null, loc)
+            : t('history.edits.version', { n: idx }, loc);
+      const src =
+        entry.source && entry.source !== 'current' && entry.source !== 'publish'
+          ? ` · ${entry.source}`
+          : '';
+      lines.push(`<b>${label}</b>${src} · ${this.formatDate(entry.at, timezone)}`);
+      const body = this.truncatePreview(entry.post, versionIndex === idx ? 3500 : 400, loc);
+      lines.push(this._escapeHtml(body));
+      lines.push('');
+    });
+
+    return lines.join('\n').trim();
+  }
+
+  static getEditVersionCount(item) {
+    return buildEditTimeline({
+      post: item.preview,
+      postOriginal: item.postOriginal,
+      editHistory: item.editHistory,
+      added: item.sortAt,
+      editedAt: item.editedAt,
+      lifecycleStatus: item.lifecycleStatus
+    }).length;
   }
 
   static async formatScheduledCard(item) {

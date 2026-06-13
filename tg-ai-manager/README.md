@@ -271,11 +271,15 @@ SUPABASE_SERVICE_KEY=sb_secret_...
 TIMEZONE=Europe/Moscow
 INSTANCE_ID=northflank-1
 HEALTH_PORT=8080
+BOT_MODE=webhook
+WEBHOOK_URL=https://ВАШ-ДОМЕН.northflank.app/telegram/webhook
+WEBHOOK_SECRET=случайная-длинная-строка
 ```
 
-3. Health check: `GET /health` на порту 8080 (отключить: `HEALTH_PORT=0`)
-4. Node 22 в Docker (нативный WebSocket для Supabase)
-5. **Один** инстанс на один `BOT_TOKEN` — не запускайте `npm start` на Mac одновременно
+3. **Webhook:** Telegram шлёт апдейты на `POST /telegram/webhook` (тот же порт, что health check). Публичный URL сервиса Northflank → в `WEBHOOK_URL`. Локально `npm start` **без** `WEBHOOK_URL` — polling.
+4. Health check: `GET /health` на порту 8080 (отключить: `HEALTH_PORT=0`, но тогда webhook не работает)
+5. Node 22 в Docker (нативный WebSocket для Supabase)
+6. **Один** инстанс на один `BOT_TOKEN` — не запускайте `npm start` на Mac одновременно с облаком
 
 **Ollama на Mac + бот в облаке:** нужен ngrok и `OLLAMA_ORIGINS=*`. Для 24/7 лучше OpenRouter/Groq.
 

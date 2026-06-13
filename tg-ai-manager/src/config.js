@@ -16,5 +16,9 @@ module.exports = {
     SUPABASE_URL: process.env.SUPABASE_URL || '',
     SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || '',
     SYNC_ENABLED: process.env.SYNC_ENABLED === 'true',
-    INSTANCE_ID: process.env.INSTANCE_ID || `local-${process.pid}`
+    INSTANCE_ID: process.env.INSTANCE_ID || `local-${process.pid}`,
+    BOT_MODE: process.env.BOT_MODE || 'polling',
+    WEBHOOK_URL: process.env.WEBHOOK_URL || '',
+    WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || '',
+    HEALTH_PORT: process.env.HEALTH_PORT || process.env.PORT || '8080'
 };

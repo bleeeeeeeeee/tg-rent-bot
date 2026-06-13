@@ -2,7 +2,10 @@ const HistoryService = require('../services/HistoryService');
 const MenuService = require('../services/MenuService');
 const UiStyleService = require('../services/UiStyleService');
 const ChannelSyncService = require('../services/ChannelSyncService');
+const ChannelPostService = require('../services/ChannelPostService');
+const ChatCleanupService = require('../services/ChatCleanupService');
 const stateManager = require('../services/StateManager');
+const { t } = require('../i18n');
 
 class HistoryHandlers {
   constructor(botService) {
@@ -13,8 +16,17 @@ class HistoryHandlers {
     return this.bs.bot;
   }
 
+  _historyState(state, filter, page) {
+    return {
+      mode: 'history_view',
+      historyFilter: filter ?? state?.historyFilter ?? 'published',
+      historyPage: page ?? state?.historyPage ?? 0
+    };
+  }
+
   async handleCallback(userId, data, state) {
     const guestBlock = async () => this.bs.requireGuestAllowed(userId);
+    const loc = await this.bs.locale(userId);
     let filter = state?.historyFilter || 'published';
     let page = state?.historyPage || 0;
 
@@ -36,11 +48,9 @@ class HistoryHandlers {
     } else if (data === 'history_filters') {
       filter = state?.historyFilter || 'published';
       const ui = await UiStyleService.get();
-      const SettingsService = require('../services/SettingsService');
-      const loc = await SettingsService.getLocale();
       return this.bs.sendMessage(
         userId,
-        `<b>${require('../i18n').t('history.filter.menu', null, loc)}</b>`,
+        `<b>${t('history.filter.menu', null, loc)}</b>`,
         {
           parse_mode: 'HTML',
           ...(await MenuService.getHistoryFilterPickerMenu(filter, ui, loc))
@@ -54,15 +64,39 @@ class HistoryHandlers {
     } else if (data === 'history_back') {
       filter = state?.historyFilter || 'published';
       page = state?.historyPage || 0;
-      stateManager.set(userId, {
-        mode: 'history_view',
-        historyFilter: filter,
-        historyPage: page
-      });
+      stateManager.set(userId, this._historyState(state, filter, page));
       return this.showHistoryList(userId, filter, page);
     } else if (data.startsWith('history_page_')) {
       page = parseInt(data.replace('history_page_', ''), 10) || 0;
       filter = state?.historyFilter || 'published';
+    }
+
+    const editStartMatch = data.match(/^history_pub_edit_(\d+)$/);
+    if (editStartMatch) {
+      if (!(await guestBlock())) return;
+      return this.startChannelEdit(userId, editStartMatch[1], state);
+    }
+
+    const deleteMatch = data.match(/^history_pub_delete_(\d+)$/);
+    if (deleteMatch) {
+      if (!(await guestBlock())) return;
+      return this.showDeleteConfirm(userId, deleteMatch[1], state);
+    }
+
+    const deleteOkMatch = data.match(/^history_pub_delete_ok_(\d+)$/);
+    if (deleteOkMatch) {
+      if (!(await guestBlock())) return;
+      return this.confirmDelete(userId, deleteOkMatch[1], state);
+    }
+
+    const editsMatch = data.match(/^history_pub_edits_(\d+)$/);
+    if (editsMatch) {
+      return this.showEditHistory(userId, editsMatch[1], state);
+    }
+
+    const textMatch = data.match(/^history_pub_text_(\d+)$/);
+    if (textMatch) {
+      return this.sendFullText(userId, textMatch[1], state);
     }
 
     const pubMatch = data.match(/^history_pub_(\d+)$/);
@@ -79,14 +113,10 @@ class HistoryHandlers {
     if (cancelMatch) {
       if (!(await guestBlock())) return;
       await this.bs.postRepository.removeScheduled(cancelMatch[1]);
-      await this.bs.sendMessage(userId, 'Запланированный пост отменён ✅');
+      await this.bs.sendMessage(userId, t('history.scheduled.cancelled', null, loc) + ' ✅');
       filter = state?.historyFilter || 'scheduled';
       page = 0;
-      stateManager.set(userId, {
-        mode: 'history_view',
-        historyFilter: filter,
-        historyPage: page
-      });
+      stateManager.set(userId, this._historyState(state, filter, page));
       return this.showHistoryList(userId, filter, page);
     }
 
@@ -95,7 +125,7 @@ class HistoryHandlers {
       if (!(await guestBlock())) return;
       const scheduled = await this.bs.postRepository.getById(nowMatch[1]);
       if (!scheduled || scheduled.status !== 'pending') {
-        return this.bs.sendMessage(userId, 'Пост не найден или уже опубликован.', await MenuService.getMainMenu());
+        return this.bs.sendMessage(userId, t('history.scheduled.not_found', null, loc), await MenuService.getMainMenu());
       }
       const publish = await this.bs.tryPublish(userId, scheduled.chatId, scheduled.messageId, {
         releaseStagingId: scheduled.messageId
@@ -103,7 +133,6 @@ class HistoryHandlers {
       if (!publish.ok) {
         await this.bs.postRepository.markAsFailed(scheduled.id, publish.message);
         if (publish.sourceMissing) {
-          const ChatCleanupService = require('../services/ChatCleanupService');
           await ChatCleanupService.releasePinnedMessage(this.bot, userId, scheduled.messageId);
         }
         await this.bs.sendMessage(userId, publish.message, await MenuService.getMainMenu());
@@ -112,11 +141,7 @@ class HistoryHandlers {
       await this.bs.postRepository.markAsPublished(scheduled.id);
       await this.bs.sendPublishConfirmation(userId, publish.result);
       filter = state?.historyFilter || 'scheduled';
-      stateManager.set(userId, {
-        mode: 'history_view',
-        historyFilter: filter,
-        historyPage: 0
-      });
+      stateManager.set(userId, this._historyState(state, filter, 0));
       return this.showHistoryList(userId, filter, 0);
     }
 
@@ -125,7 +150,7 @@ class HistoryHandlers {
       if (!(await guestBlock())) return;
       const scheduled = await this.bs.postRepository.getById(rescheduleMatch[1]);
       if (!scheduled || scheduled.status !== 'pending') {
-        return this.bs.sendMessage(userId, 'Пост не найден.', await MenuService.getMainMenu());
+        return this.bs.sendMessage(userId, t('history.scheduled.not_found', null, loc), await MenuService.getMainMenu());
       }
       const today = new Date();
       stateManager.set(userId, {
@@ -140,17 +165,125 @@ class HistoryHandlers {
       });
       return this.bs.sendMessage(
         userId,
-        'Выберите новую дату публикации:',
+        t('history.scheduled.pick_date', null, loc),
         MenuService.getCalendar(today.getFullYear(), today.getMonth(), await UiStyleService.get())
       );
     }
 
-    stateManager.set(userId, {
-      mode: 'history_view',
-      historyFilter: filter,
-      historyPage: page
-    });
+    stateManager.set(userId, this._historyState(state, filter, page));
     return this.showHistoryList(userId, filter, page);
+  }
+
+  async handleMessageStep(userId, msg, state) {
+    if (state?.mode !== 'waiting_channel_edit_text') return false;
+
+    const loc = await this.bs.locale(userId);
+    const text = msg.text?.trim();
+    if (!text) {
+      await this.bs.sendMessage(userId, t('history.edit.empty', null, loc));
+      return true;
+    }
+
+    await ChatCleanupService.consumeUserMessage(this.bot, msg);
+    const postId = state.channelMessageId;
+    const filter = state.historyFilter || 'published';
+    const page = state.historyPage || 0;
+
+    try {
+      await this.bs.channelPostService.editText(postId, text, { source: 'bot' });
+      await this.bs.sendMessage(userId, t('history.edit.saved', null, loc) + ' ✅');
+    } catch (err) {
+      await this.bs.sendMessage(userId, ChannelPostService.formatEditError(err));
+    }
+
+    stateManager.set(userId, this._historyState(state, filter, page));
+    return this.showPublishedCard(userId, postId, { historyFilter: filter, historyPage: page });
+  }
+
+  async startChannelEdit(userId, postId, state) {
+    const loc = await this.bs.locale(userId);
+    const item = await HistoryService.getItem({ kind: 'published', refId: postId });
+    if (!item) {
+      return this.bs.sendMessage(userId, t('history.post.not_found', null, loc), await MenuService.getMainMenu());
+    }
+    if (item.lifecycleStatus === 'deleted') {
+      return this.bs.sendMessage(userId, t('history.edit.deleted', null, loc));
+    }
+    if (item.media && !item.preview?.trim()) {
+      return this.bs.sendMessage(userId, t('history.edit.no_caption', null, loc));
+    }
+
+    stateManager.set(userId, {
+      mode: 'waiting_channel_edit_text',
+      channelMessageId: Number(postId),
+      historyFilter: state?.historyFilter || 'published',
+      historyPage: state?.historyPage || 0
+    });
+
+    const preview = item.preview?.trim()
+      ? `<pre>${HistoryService._escapeHtml(HistoryService.truncatePreview(item.preview, 800, loc))}</pre>`
+      : `<i>${t('history.no_text', null, loc)}</i>`;
+
+    return this.bs.sendMessage(
+      userId,
+      `${t('history.edit.prompt', { id: postId }, loc)}\n\n${preview}`,
+      { parse_mode: 'HTML' }
+    );
+  }
+
+  async showDeleteConfirm(userId, postId, state) {
+    const loc = await this.bs.locale(userId);
+    const ui = await UiStyleService.get();
+    stateManager.set(userId, this._historyState(state, state?.historyFilter, state?.historyPage));
+    return this.bs.sendMessage(
+      userId,
+      `<b>${t('history.delete.confirm_title', { id: postId }, loc)}</b>\n\n${t('history.delete.confirm_hint', null, loc)}`,
+      {
+        parse_mode: 'HTML',
+        ...MenuService.getPublishedDeleteConfirmMenu(postId, ui, loc)
+      }
+    );
+  }
+
+  async confirmDelete(userId, postId, state) {
+    const loc = await this.bs.locale(userId);
+    try {
+      await this.bs.channelPostService.deleteFromChannel(postId);
+      await this.bs.sendMessage(userId, t('history.delete.done', { id: postId }, loc) + ' ✅');
+    } catch (err) {
+      await this.bs.sendMessage(userId, ChannelPostService.formatDeleteError(err));
+    }
+    const filter = state?.historyFilter || 'published';
+    stateManager.set(userId, this._historyState(state, filter, state?.historyPage || 0));
+    return this.showPublishedCard(userId, postId, state);
+  }
+
+  async showEditHistory(userId, postId, state) {
+    const loc = await this.bs.locale(userId);
+    const item = await HistoryService.getItem({ kind: 'published', refId: postId });
+    if (!item) {
+      return this.bs.sendMessage(userId, t('history.post.not_found', null, loc), await MenuService.getMainMenu());
+    }
+    const ui = await UiStyleService.get();
+    stateManager.set(userId, this._historyState(state, state?.historyFilter, state?.historyPage));
+    return this.bs.sendMessage(
+      userId,
+      await HistoryService.formatEditHistoryCard(item, {}, loc),
+      {
+        parse_mode: 'HTML',
+        ...MenuService.getEditHistoryMenu(postId, ui, loc)
+      }
+    );
+  }
+
+  async sendFullText(userId, postId, state) {
+    const loc = await this.bs.locale(userId);
+    const item = await HistoryService.getItem({ kind: 'published', refId: postId });
+    if (!item?.preview?.trim()) {
+      return this.bs.sendMessage(userId, t('history.no_text', null, loc));
+    }
+    stateManager.set(userId, this._historyState(state, state?.historyFilter, state?.historyPage));
+    return this.bs.sendMessage(userId, item.preview, {}, { noNav: true });
   }
 
   async runChannelSync(userId, filter, page, { silent = false } = {}) {
@@ -166,8 +299,7 @@ class HistoryHandlers {
 
     let preamble = null;
     if (!silent) {
-      const waitText = loc === 'en' ? '⏳ Syncing archive with channel…' : '⏳ Синхронизирую архив с каналом…';
-      await this.bs.sendMessage(userId, waitText, {}, { noNav: true });
+      await this.bs.sendMessage(userId, t('history.sync.running', null, loc), {}, { noNav: true });
     }
 
     try {
@@ -206,45 +338,45 @@ class HistoryHandlers {
     });
 
     if (result.total === 0) {
-      return this.bs.sendMessage(userId, 'Выберите действие:', await MenuService.getMainMenu(), { append: true });
+      const loc = await this.bs.locale(userId);
+      return this.bs.sendMessage(
+        userId,
+        t('history.list.pick_action', null, loc),
+        await MenuService.getMainMenu(),
+        { append: true }
+      );
     }
 
     return this.bs.sendMessage(
       userId,
-      'Выберите пост:',
+      t('history.list.pick_post', null, result.locale),
       MenuService.getHistoryListMenu(result.items, result.page, result.pages, ui),
       { append: true }
     );
   }
 
   async showPublishedCard(userId, refId, state) {
+    const loc = await this.bs.locale(userId);
     const item = await HistoryService.getItem({ kind: 'published', refId });
     if (!item) {
-      return this.bs.sendMessage(userId, 'Пост не найден.', await MenuService.getMainMenu());
+      return this.bs.sendMessage(userId, t('history.post.not_found', null, loc), await MenuService.getMainMenu());
     }
     const ui = await UiStyleService.get();
-    stateManager.set(userId, {
-      mode: 'history_view',
-      historyFilter: state?.historyFilter || 'published',
-      historyPage: state?.historyPage || 0
-    });
-    return this.bs.sendMessage(userId, await HistoryService.formatPublishedCard(item), {
+    stateManager.set(userId, this._historyState(state, state?.historyFilter, state?.historyPage));
+    return this.bs.sendMessage(userId, await HistoryService.formatPublishedCard(item, loc), {
       parse_mode: 'HTML',
-      ...MenuService.getPublishedCardMenu(item.channelUrl, item.replyContext, ui)
+      ...MenuService.getPublishedCardMenu(item, item.replyContext, ui, loc)
     });
   }
 
   async showScheduledCard(userId, refId, state) {
+    const loc = await this.bs.locale(userId);
     const item = await HistoryService.getItem({ kind: 'scheduled', refId });
     if (!item) {
-      return this.bs.sendMessage(userId, 'Пост не найден.', await MenuService.getMainMenu());
+      return this.bs.sendMessage(userId, t('history.scheduled.not_found', null, loc), await MenuService.getMainMenu());
     }
     const ui = await UiStyleService.get();
-    stateManager.set(userId, {
-      mode: 'history_view',
-      historyFilter: state?.historyFilter || 'scheduled',
-      historyPage: state?.historyPage || 0
-    });
+    stateManager.set(userId, this._historyState(state, state?.historyFilter, state?.historyPage));
     return this.bs.sendMessage(userId, await HistoryService.formatScheduledCard(item), {
       parse_mode: 'HTML',
       ...MenuService.getScheduledCardMenu(item.refId, ui)
