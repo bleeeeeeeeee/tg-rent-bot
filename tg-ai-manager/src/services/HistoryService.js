@@ -184,6 +184,10 @@ class HistoryService {
     const slice = items.slice(safePage * pageSize, (safePage + 1) * pageSize);
 
     const locale = await SettingsService.getLocale();
+    const archiveTotal =
+      filter === 'published' || filter === 'all'
+        ? (await ExistingPosts.getAll()).filter((p) => p.lifecycleStatus !== 'deleted').length
+        : null;
     return {
       items: slice,
       total,
@@ -191,7 +195,8 @@ class HistoryService {
       page: safePage,
       filter,
       filterLabel: await this.getFilterLabel(filter, locale),
-      locale
+      locale,
+      archiveTotal
     };
   }
 
@@ -251,10 +256,16 @@ class HistoryService {
   }
 
   static formatListHeader(result) {
-    const { filterLabel, total, page, pages, locale = 'ru' } = result;
+    const { filterLabel, total, page, pages, locale = 'ru', archiveTotal = null } = result;
     const title = t('history.list.title', null, locale);
     if (total === 0) {
-      return `📚 <b>${title}</b>\n\n${t('history.list.mode', { filter: filterLabel }, locale)}\n${t('history.list.empty', null, locale)}`;
+      let empty = `📚 <b>${title}</b>\n\n${t('history.list.mode', { filter: filterLabel }, locale)}\n${t('history.list.empty', null, locale)}`;
+      if (archiveTotal != null && archiveTotal > 0) {
+        empty += `\n${t('history.list.hidden_in_archive', { count: archiveTotal }, locale)}`;
+      } else {
+        empty += `\n${t('history.list.sync_hint', null, locale)}`;
+      }
+      return empty;
     }
     return (
       `📚 <b>${title}</b>\n\n` +

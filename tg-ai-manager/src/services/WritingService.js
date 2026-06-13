@@ -24,27 +24,13 @@ const {
 
 class WritingService {
   static async _resolveAiForWriting() {
-    let providerId = await SettingsService.getActiveProvider();
-    const secrets = providerId ? await SecretsService.getProviderSecret(providerId) : null;
-
-    if (!providerId || !AiProviderRegistry.isConfigured(providerId, secrets)) {
-      const configured = [];
-      for (const p of AiProviderRegistry.listAll()) {
-        const s = await SecretsService.getProviderSecret(p.id);
-        if (AiProviderRegistry.isConfigured(p.id, s)) configured.push(p.id);
-      }
-      if (configured.length === 0) return null;
-      providerId = configured[0];
-      await SettingsService.setActiveProvider(providerId);
-    }
-
-    const finalSecrets = await SecretsService.getProviderSecret(providerId);
-    const model = await SettingsService.getModel(providerId);
-    return { providerId, secrets: finalSecrets, model };
+    const AiConfigService = require('./AiConfigService');
+    return AiConfigService.resolveForGeneration();
   }
 
   static async canWrite() {
-    return Boolean(await this._resolveAiForWriting());
+    const AiConfigService = require('./AiConfigService');
+    return AiConfigService.isReady();
   }
 
   static async resolveAi() {

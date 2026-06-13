@@ -6,6 +6,7 @@ const SyncService = require('./services/SyncService');
 const { startHealthServer, stopHealthServer } = require('./health');
 const { CHANNEL_ID, ADMIN_ID, OWNER_TELEGRAM_ID, BOT_TOKEN, STORAGE_BACKEND } = require('./config');
 const ExistingPosts = require('./services/ExistingPosts');
+const ChannelSyncService = require('./services/ChannelSyncService');
 const SecretsService = require('./services/SecretsService');
 const SettingsService = require('./services/SettingsService');
 const AiProviderRegistry = require('./ai/AiProviderRegistry');
@@ -78,6 +79,22 @@ process.on('SIGINT', () => shutdown('SIGINT'));
     const postCount = await ExistingPosts.count();
     const pendingCount = (await PostRepository.getAllPending()).length;
     console.log(`\n📊 Posts in DB: ${postCount} (${pendingCount} scheduled)`);
+
+    if (postCount === 0 && ChannelSyncService.canSync()) {
+      console.log('📥 Archive empty — starting background channel import…');
+      ChannelSyncService.syncChannel()
+        .then((result) => {
+          console.log(
+            `[ChannelSync] Background import done: channel=${result.channelScanned} imported=${result.imported} archive=${result.archiveTotal}`
+          );
+        })
+        .catch((err) => console.error('[ChannelSync] Background import failed:', err.message));
+    } else if (postCount === 0) {
+      console.log(
+        '⚠️  Archive empty. Add TG_API_ID, TG_API_HASH, TG_SESSION for import, or use History → Sync in bot.'
+      );
+    }
+
     console.log('\nMode: channel monitoring enabled 🔄\n');
 
     botService = new BotService(PostRepository);

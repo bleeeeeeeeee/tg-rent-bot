@@ -5,6 +5,13 @@ const SupabaseBackend = require('../storage/SupabaseBackend');
 const SettingsService = require('./SettingsService');
 const SecretsService = require('./SecretsService');
 const { COLLECTIONS } = require('../storage/collections');
+const {
+  allCollectionKeys,
+  countCollection,
+  isCollectionEmpty,
+  collectionLabel,
+  CRITICAL_KEYS
+} = require('../storage/syncUtils');
 const { STORAGE_BACKEND, SUPABASE_URL, SUPABASE_SERVICE_KEY, INSTANCE_ID } = require('../config');
 
 class SyncService {
@@ -17,9 +24,149 @@ class SyncService {
   };
 
   static async init() {
+    await this.initStorageBackend();
     await this._registerInstance();
     this.startHeartbeat();
     await this.startRealtime();
+  }
+
+  static async initStorageBackend() {
+    let cloud;
+    try {
+      cloud = await SettingsService.getCloud();
+    } catch {
+      return null;
+    }
+
+    const targetMode = cloud?.mode || STORAGE_BACKEND || 'file';
+    const current = StorageRegistry.getBackend().name;
+
+    if (targetMode !== current && targetMode !== 'file') {
+      await this.applyStorageMode(targetMode);
+    }
+
+    if (StorageRegistry.getBackend().name === 'dual') {
+      return this.hydrateLocalFromCloud();
+    }
+    return null;
+  }
+
+  static async hydrateLocalFromCloud(keys = [...CRITICAL_KEYS]) {
+    const backend = StorageRegistry.getBackend();
+    if (backend.name !== 'dual') return { hydrated: [], skipped: [] };
+
+    const hydrated = [];
+    const skipped = [];
+
+    for (const key of keys) {
+      try {
+        const local = await backend.file.read(key, null);
+        if (!isCollectionEmpty(key, local)) {
+          skipped.push(key);
+          continue;
+        }
+        const remote = await backend.cloud.read(key, null);
+        if (isCollectionEmpty(key, remote)) {
+          skipped.push(key);
+          continue;
+        }
+        await backend.file.write(key, remote);
+        hydrated.push(key);
+      } catch (err) {
+        console.warn(`[SyncService] hydrate ${key}:`, err.message);
+      }
+    }
+
+    if (hydrated.length) {
+      console.log(`[SyncService] Hydrated local from cloud: ${hydrated.join(', ')}`);
+    }
+    return { hydrated, skipped };
+  }
+
+  static async compareLocalAndCloud() {
+    const file = StorageRegistry.getFileBackend();
+    let cloud;
+    try {
+      cloud = await this.createCloudBackend();
+    } catch (err) {
+      return { ok: false, error: err.message, rows: [] };
+    }
+
+    const rows = [];
+    for (const key of allCollectionKeys()) {
+      const local = await file.read(key, null);
+      let remote = null;
+      try {
+        remote = await cloud.read(key, null);
+      } catch {
+        remote = null;
+      }
+      rows.push({
+        key,
+        localCount: countCollection(key, local),
+        cloudCount: countCollection(key, remote),
+        localEmpty: isCollectionEmpty(key, local),
+        cloudEmpty: isCollectionEmpty(key, remote)
+      });
+    }
+    return { ok: true, rows };
+  }
+
+  static async getPushEraseWarnings() {
+    const file = StorageRegistry.getFileBackend();
+    let cloud;
+    try {
+      cloud = await this.createCloudBackend();
+    } catch {
+      return [];
+    }
+
+    const warnings = [];
+    for (const key of CRITICAL_KEYS) {
+      const local = await file.read(key, null);
+      const remote = await cloud.read(key, null);
+      if (isCollectionEmpty(key, local) && !isCollectionEmpty(key, remote)) {
+        warnings.push({
+          key,
+          localCount: 0,
+          cloudCount: countCollection(key, remote)
+        });
+      }
+    }
+    return warnings;
+  }
+
+  static formatCompareReport(comparison, locale = 'ru') {
+    if (!comparison.ok) {
+      return locale === 'en'
+        ? `⚠️ Could not compare: ${comparison.error}`
+        : `⚠️ Не удалось сравнить: ${comparison.error}`;
+    }
+
+    const lines = [
+      locale === 'en' ? '<b>Local vs cloud</b>' : '<b>Локально vs облако</b>',
+      ''
+    ];
+
+    for (const row of comparison.rows) {
+      const label = collectionLabel(row.key, locale);
+      lines.push(`• ${label}: ${row.localCount} / ${row.cloudCount}`);
+      if (row.localEmpty && !row.cloudEmpty) {
+        lines.push(
+          locale === 'en'
+            ? '  ↳ local empty — Pull recommended before dual-sync'
+            : '  ↳ локально пусто — сделайте Pull перед dual-sync'
+        );
+      }
+      if (!row.localEmpty && row.cloudEmpty) {
+        lines.push(
+          locale === 'en'
+            ? '  ↳ cloud empty — Push will upload local data'
+            : '  ↳ в облаке пусто — Push загрузит локальные данные'
+        );
+      }
+    }
+    return lines.join('\n');
   }
 
   static getStatus() {
@@ -115,13 +262,28 @@ class SyncService {
     return { counts, errors };
   }
 
-  static async syncNow(direction = 'push') {
+  static async syncNow(direction = 'push', { force = false, skipKeys = [] } = {}) {
     const backend = StorageRegistry.getBackend();
     const now = new Date().toISOString();
 
     try {
       if (backend.name === 'dual') {
-        const counts = direction === 'pull' ? await backend.pullAll() : await backend.pushAll();
+        let pushSkip = [...skipKeys];
+        if (direction === 'push' && !force) {
+          const eraseWarnings = await this.getPushEraseWarnings();
+          const blocked = eraseWarnings.filter((w) => !pushSkip.includes(w.key));
+          if (blocked.length) {
+            return { ok: false, needsConfirm: true, direction, blocked, counts: {} };
+          }
+        }
+        if (direction === 'push' && force) {
+          const eraseWarnings = await this.getPushEraseWarnings();
+          pushSkip = [...new Set([...pushSkip, ...eraseWarnings.map((w) => w.key)])];
+        }
+        const counts =
+          direction === 'pull'
+            ? await backend.pullAll()
+            : await backend.pushAll({ skipKeys: pushSkip });
         await SettingsService.setCloud({ lastSyncAt: now, lastSyncError: null });
         return { ok: true, direction, counts };
       }
@@ -173,7 +335,12 @@ class SyncService {
       SUPABASE_SERVICE_KEY: key
     };
     StorageRegistry.useBackend(StorageRegistry.resolveBackend(cfg));
+    let hydration = null;
+    if (mode === 'dual') {
+      hydration = await this.hydrateLocalFromCloud();
+    }
     await this.startRealtime();
+    return { mode, hydration };
   }
 
   static async getCloudMeta() {

@@ -5,6 +5,8 @@ const AccessService = require('./AccessService');
 const ExistingPosts = require('./ExistingPosts');
 const PostRepository = require('./PostRepository');
 const SecretsService = require('./SecretsService');
+const AiConfigService = require('./AiConfigService');
+const AiProviderRegistry = require('../ai/AiProviderRegistry');
 const { STORAGE_BACKEND, INSTANCE_ID } = require('../config');
 
 class AdminUIService {
@@ -68,11 +70,23 @@ class AdminUIService {
       /* optional */
     }
 
+    const aiDiag = await AiConfigService.diagnose();
+    let aiLine;
+    if (aiDiag.configured.length > 0) {
+      const name = AiProviderRegistry.getLabel(aiDiag.active || aiDiag.configured[0]);
+      aiLine = t('admin.cloud.ai_ok', { name, count: aiDiag.configured.length }, loc);
+    } else if (aiDiag.issues.some((i) => i.code === 'dual_local_empty_cloud_has_ai')) {
+      aiLine = t('admin.cloud.ai_pull_hint', null, loc);
+    } else {
+      aiLine = t('admin.cloud.ai_missing', null, loc);
+    }
+
     return (
       `<b>${t('admin.cloud.title', null, loc)}</b>\n\n` +
       `Mode: <b>${mode}</b>\n` +
       `URL: <code>${url}</code>\n` +
       `Key: <code>${keyMask}</code>\n` +
+      `${aiLine}\n` +
       `${t('admin.system.realtime', null, loc)}: <b>${syncStatus.connected ? t('admin.system.realtime.on', null, loc) : t('admin.system.realtime.off', null, loc)}</b>\n` +
       (cloud.lastSyncAt ? `${t('admin.system.last_sync', null, loc)}: ${cloud.lastSyncAt}\n` : '') +
       (cloud.lastSyncError ? `⚠️ ${cloud.lastSyncError}\n` : '') +

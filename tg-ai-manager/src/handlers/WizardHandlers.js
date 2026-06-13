@@ -65,7 +65,9 @@ class WizardHandlers {
 
   async startAiWizard(userId) {
     if (!(await WritingService.canWrite())) {
-      return this.bs.sendMessage(userId, 'ИИ не настроен. Подключите сервис в <b>Настройки → ИИ для постов</b>.', {
+      const AiConfigService = require('../services/AiConfigService');
+      const loc = await this.bs.locale(userId);
+      return this.bs.sendMessage(userId, await AiConfigService.formatNotReadyMessage(loc), {
         parse_mode: 'HTML',
         ...(await MenuService.getMainMenu())
       });
@@ -124,7 +126,7 @@ class WizardHandlers {
     );
   }
 
-  async showWizardMediaStep(userId, state, ui = null) {
+  async showWizardMediaStep(userId, state, ui = null, sendOpts = {}) {
     if (!ui) ui = await UiStyleService.get();
     const wizard = state?.wizard;
     MediaLib.migrateLegacyMedia(wizard);
@@ -153,7 +155,8 @@ class WizardHandlers {
       {
         parse_mode: 'HTML',
         ...MenuService.getWizardMediaGalleryMenu('wizard_skip_media', { wizard, mode, filled, editing, ui, page })
-      }
+      },
+      sendOpts
     );
   }
 
@@ -237,7 +240,7 @@ class WizardHandlers {
       );
     }
 
-    return this.showWizardMediaStep(userId, state, ui);
+    return this.showWizardMediaStep(userId, state, ui, { append: true });
   }
 
   getNextWizardMode(current) {

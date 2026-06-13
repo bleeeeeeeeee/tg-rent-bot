@@ -27,7 +27,9 @@ function parseArgs(argv) {
     syncText: args.syncText
   });
 
-  console.log(`\nReconcile done. checked=${result.checked} deleted=${result.deleted} synced=${result.synced}`);
+  console.log(
+    `\nSync done. channel=${result.channelScanned} imported=${result.imported} updated=${result.updated} deleted=${result.deleted} archive=${result.archiveTotal} visible=${result.visiblePublished}`
+  );
 })().catch((err) => {
   console.error('Reconcile failed:', err.message);
   process.exit(1);

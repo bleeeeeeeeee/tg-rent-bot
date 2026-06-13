@@ -219,7 +219,7 @@ class ExistingPosts {
     return cleaned;
   }
 
-  static async addPost(messageId, postText = '', mediaInfo = null, replyToId = null, mediaGroupId = null) {
+  static async addPost(messageId, postText = '', mediaInfo = null, replyToId = null, mediaGroupId = null, added = null) {
     try {
       const data = await this._read();
       const id = Number(messageId);
@@ -240,7 +240,8 @@ class ExistingPosts {
         postText,
         mediaInfo,
         replyToId,
-        mediaGroupId
+        mediaGroupId,
+        added
       });
 
       data.posts = data.posts || [];

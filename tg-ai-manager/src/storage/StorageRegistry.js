@@ -1,5 +1,6 @@
 const FileBackend = require('./FileBackend');
 const SupabaseBackend = require('./SupabaseBackend');
+const { isCollectionEmpty, shouldHydrateKey } = require('./syncUtils');
 
 class DualSyncBackend {
   constructor(fileBackend, supabaseBackend) {
@@ -9,7 +10,20 @@ class DualSyncBackend {
   }
 
   async read(key, defaultValue = null) {
-    return this.file.read(key, defaultValue);
+    const local = await this.file.read(key, defaultValue);
+    if (!shouldHydrateKey(key) || !isCollectionEmpty(key, local)) {
+      return local;
+    }
+    try {
+      const remote = await this.cloud.read(key, defaultValue);
+      if (!isCollectionEmpty(key, remote)) {
+        await this.file.write(key, remote);
+        return remote;
+      }
+    } catch (err) {
+      console.warn(`[DualSyncBackend] hydrate ${key} from cloud failed:`, err.message);
+    }
+    return local;
   }
 
   async write(key, data) {
@@ -29,20 +43,17 @@ class DualSyncBackend {
     return { ok: local.ok && remote.ok, local, remote, backend: 'dual' };
   }
 
-  async pushAll() {
+  async pushAll({ skipKeys = [] } = {}) {
     const keys = Object.keys(require('./collections').COLLECTIONS);
+    const skip = new Set(skipKeys);
     const counts = {};
     for (const key of keys) {
+      if (skip.has(key)) continue;
       const data = await this.file.read(key, null);
       if (data != null) {
         await this.cloud.write(key, data);
-        counts[key] = Array.isArray(data.posts)
-          ? data.posts.length
-          : Array.isArray(data.drafts)
-            ? data.drafts.length
-            : Array.isArray(data.entries)
-              ? data.entries.length
-              : 1;
+        const { countCollection } = require('./syncUtils');
+        counts[key] = countCollection(key, data);
       }
     }
     await this.cloud.setSyncMeta({

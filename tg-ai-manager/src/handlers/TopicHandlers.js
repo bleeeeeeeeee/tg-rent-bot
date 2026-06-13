@@ -25,9 +25,10 @@ class TopicHandlers {
   async showEntry(userId) {
     const loc = await this.locale(userId);
     if (!(await WritingService.canWrite())) {
+      const AiConfigService = require('../services/AiConfigService');
       return this.bs.sendMessage(
         userId,
-        t('topics.no_ai', null, loc),
+        await AiConfigService.formatNotReadyMessage(loc),
         { parse_mode: 'HTML', ...(await MenuService.getMainMenu(null, { locale: loc })) }
       );
     }

@@ -62,7 +62,7 @@ CHANNEL_ID=@my_channel
 
 ### Переменные для импорта постов (GramJS)
 
-Нужны **только** если запускаете `npm run import:channel` или `npm run reconcile`. Для работы самого бота **не обязательны**.
+Нужны для **истории постов** (импорт из канала, кнопка «Сверить с каналом») и CLI `import:channel` / `reconcile`. На облаке (Northflank) добавьте их в **Runtime Variables**, иначе архив будет пустым для старых постов — бот видит только новые публикации через `channel_post`.
 
 | Переменная | Зачем | Как получить |
 |------------|-------|--------------|
@@ -103,7 +103,7 @@ npm run import:channel
 | `npm run gram:login` | Вход: телефон + код → сессия → запись `TG_SESSION` в `.env`. |
 | `npm run import:channel` | Загружает посты канала в `storage/existing-posts.json`. Нужны `TG_API_ID`, `TG_API_HASH`, `TG_SESSION`. |
 | `npm run import:export` | Импорт из JSON Telegram Desktop. GramJS не нужен. |
-| `npm run reconcile` | Сверка архива с каналом. Нужен `TG_SESSION`. |
+| `npm run reconcile` | Полная синхронизация: загрузка постов из канала + пометка удалённых. Нужен `TG_SESSION`. |
 | `npm run enrich` | ИИ по всем постам архива. Нужен провайдер в боте / `secrets.json`. |
 
 ### «TG_SESSION is required» после gram:login

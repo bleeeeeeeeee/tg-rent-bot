@@ -1,7 +1,7 @@
 const HistoryService = require('../services/HistoryService');
 const MenuService = require('../services/MenuService');
 const UiStyleService = require('../services/UiStyleService');
-const ChannelReconcileService = require('../services/ChannelReconcileService');
+const ChannelSyncService = require('../services/ChannelSyncService');
 const stateManager = require('../services/StateManager');
 
 class HistoryHandlers {
@@ -33,33 +33,24 @@ class HistoryHandlers {
     } else if (data === 'history_filter_deleted') {
       filter = 'deleted';
       page = 0;
+    } else if (data === 'history_filters') {
+      filter = state?.historyFilter || 'published';
+      const ui = await UiStyleService.get();
+      const SettingsService = require('../services/SettingsService');
+      const loc = await SettingsService.getLocale();
+      return this.bs.sendMessage(
+        userId,
+        `<b>${require('../i18n').t('history.filter.menu', null, loc)}</b>`,
+        {
+          parse_mode: 'HTML',
+          ...(await MenuService.getHistoryFilterPickerMenu(filter, ui, loc))
+        }
+      );
     } else if (data === 'history_sync') {
       if (!(await guestBlock())) return;
       filter = state?.historyFilter || 'published';
       page = state?.historyPage || 0;
-      if (!ChannelReconcileService.canReconcile()) {
-        return this.bs.sendMessage(
-          userId,
-          'Сверка недоступна: нужны <code>TG_API_ID</code>, <code>TG_API_HASH</code> и <code>TG_SESSION</code> в .env.\n\n' +
-            '1. <code>npm run gram:login</code>\n' +
-            '2. Перезапустите бота\n\n' +
-            'Или на сервере: <code>npm run reconcile</code>',
-          { parse_mode: 'HTML' }
-        );
-      }
-      await this.bs.sendMessage(userId, '⏳ Сверяю архив с каналом…', {}, { noNav: true });
-      try {
-        const result = await ChannelReconcileService.reconcileChannel();
-        let note = `✅ Сверка завершена.\nПроверено: ${result.checked}`;
-        if (result.deleted) note += `\nПомечено удалёнными: ${result.deleted}`;
-        else note += '\nРасхождений не найдено.';
-        await this.bs.sendMessage(userId, note, { append: true });
-      } catch (err) {
-        console.error('[HistoryHandlers] history_sync error:', err.message);
-        await this.bs.sendMessage(userId, `❌ ${err.message}`, { append: true });
-      }
-      stateManager.set(userId, { mode: 'history_view', historyFilter: filter, historyPage: page });
-      return this.showHistoryList(userId, filter, page);
+      return this.runChannelSync(userId, filter, page);
     } else if (data === 'history_back') {
       filter = state?.historyFilter || 'published';
       page = state?.historyPage || 0;
@@ -162,14 +153,56 @@ class HistoryHandlers {
     return this.showHistoryList(userId, filter, page);
   }
 
-  async showHistoryList(userId, filter, page) {
+  async runChannelSync(userId, filter, page, { silent = false } = {}) {
+    const loc = await this.bs.locale(userId);
+    if (!ChannelSyncService.canSync()) {
+      const hint =
+        loc === 'en'
+          ? 'Sync unavailable: set <code>TG_API_ID</code>, <code>TG_API_HASH</code>, <code>TG_SESSION</code>.\n\n1. <code>npm run gram:login</code>\n2. Restart the bot\n\nOn server add these to Runtime Variables.'
+          : 'Синхронизация недоступна: нужны <code>TG_API_ID</code>, <code>TG_API_HASH</code>, <code>TG_SESSION</code>.\n\n' +
+            '1. <code>npm run gram:login</code>\n2. Перезапустите бота\n\nНа сервере добавьте их в Runtime Variables.';
+      return this.bs.sendMessage(userId, hint, { parse_mode: 'HTML' });
+    }
+
+    let preamble = null;
+    if (!silent) {
+      const waitText = loc === 'en' ? '⏳ Syncing archive with channel…' : '⏳ Синхронизирую архив с каналом…';
+      await this.bs.sendMessage(userId, waitText, {}, { noNav: true });
+    }
+
+    try {
+      const result = await ChannelSyncService.syncChannel();
+      if (!silent) {
+        preamble = ChannelSyncService.formatSyncReport(result, loc);
+      }
+    } catch (err) {
+      console.error('[HistoryHandlers] channel sync error:', err.message);
+      if (!silent) {
+        preamble = `❌ ${err.message}`;
+      }
+    }
+
+    stateManager.set(userId, { mode: 'history_view', historyFilter: filter, historyPage: page });
+    return this.showHistoryList(userId, filter, page, { tryAutoSync: false, preamble });
+  }
+
+  async showHistoryList(userId, filter, page, { tryAutoSync = true, preamble = null } = {}) {
     const ui = await UiStyleService.get();
-    const result = await HistoryService.list({ filter, page });
-    const header = HistoryService.formatListHeader(result);
+    let result = await HistoryService.list({ filter, page });
+
+    if (tryAutoSync && result.total === 0 && filter === 'published' && ChannelSyncService.canSync()) {
+      await this.runChannelSync(userId, filter, page, { silent: true });
+      return this.showHistoryList(userId, filter, page, { tryAutoSync: false });
+    }
+
+    let header = HistoryService.formatListHeader(result);
+    if (preamble) {
+      header = `${preamble}\n\n${header}`;
+    }
 
     await this.bs.sendMessage(userId, header, {
       parse_mode: 'HTML',
-      ...MenuService.getHistoryFilters(filter, ui)
+      ...(await MenuService.getHistoryFilters(filter, ui))
     });
 
     if (result.total === 0) {

@@ -103,10 +103,18 @@ class SupabaseBackend {
 
   async _writePosts(doc) {
     const posts = doc?.posts || [];
+    const { data: existingRows, error: readError } = await this.client.from('channel_posts').select('id');
+    if (readError) throw new Error(readError.message);
+
     if (!posts.length) {
-      await this.client.from('channel_posts').delete().neq('id', 0);
+      if (existingRows?.length) {
+        const { error } = await this.client.from('channel_posts').delete().neq('id', 0);
+        if (error) throw new Error(error.message);
+      }
       return;
     }
+
+    const newIds = new Set(posts.map((p) => Number(p.id)));
     const rows = posts.map((p) => ({
       id: Number(p.id),
       payload: p,
@@ -117,6 +125,14 @@ class SupabaseBackend {
     for (let i = 0; i < rows.length; i += chunk) {
       const { error } = await this.client.from('channel_posts').upsert(rows.slice(i, i + chunk));
       if (error) throw new Error(error.message);
+    }
+
+    const staleIds = (existingRows || []).map((r) => Number(r.id)).filter((id) => !newIds.has(id));
+    if (staleIds.length) {
+      for (let i = 0; i < staleIds.length; i += chunk) {
+        const { error } = await this.client.from('channel_posts').delete().in('id', staleIds.slice(i, i + chunk));
+        if (error) throw new Error(error.message);
+      }
     }
   }
 

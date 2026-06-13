@@ -2,6 +2,7 @@ const SettingsService = require('./SettingsService');
 
 class ChatCleanupService {
   constructor() {
+    /** @type {Map<number, { ephemeral: number[], pinned: Set<number> }>} */
     this.stacks = new Map();
     this.replyKeyboardReady = new Set();
   }
@@ -9,9 +10,15 @@ class ChatCleanupService {
   _stack(chatId) {
     const id = Number(chatId);
     if (!this.stacks.has(id)) {
-      this.stacks.set(id, { botMessages: [], pinned: new Set() });
+      this.stacks.set(id, { ephemeral: [], pinned: new Set() });
     }
     return this.stacks.get(id);
+  }
+
+  resetChat(chatId) {
+    const id = Number(chatId);
+    this.stacks.delete(id);
+    this.replyKeyboardReady.delete(id);
   }
 
   trackBotMessage(chatId, messageId, { pinned = false } = {}) {
@@ -19,39 +26,65 @@ class ChatCleanupService {
     const stack = this._stack(chatId);
     if (pinned) {
       stack.pinned.add(messageId);
+      stack.ephemeral = stack.ephemeral.filter((id) => id !== messageId);
       return;
     }
-    stack.botMessages.push(messageId);
+    if (stack.pinned.has(messageId)) return;
+    if (!stack.ephemeral.includes(messageId)) {
+      stack.ephemeral.push(messageId);
+    }
   }
 
-  async flushBotMessages(bot, chatId) {
-    const enabled = await SettingsService.getChatCleanup();
-    if (!enabled) return 0;
-
+  snapshotEphemeral(chatId) {
     const stack = this.stacks.get(Number(chatId));
-    if (!stack?.botMessages.length) return 0;
+    if (!stack) return [];
+    return [...stack.ephemeral];
+  }
 
+  clearEphemeral(chatId) {
+    const stack = this.stacks.get(Number(chatId));
+    if (stack) stack.ephemeral = [];
+  }
+
+  async deleteMessages(bot, chatId, messageIds, { keepPinned = true } = {}) {
+    if (!messageIds?.length) return 0;
+    const stack = this.stacks.get(Number(chatId));
+    const unique = [...new Set(messageIds.filter(Boolean))];
     let deleted = 0;
-    for (const messageId of stack.botMessages) {
-      if (stack.pinned.has(messageId)) continue;
+
+    for (const messageId of unique) {
+      if (keepPinned && stack?.pinned.has(messageId)) continue;
       try {
         await bot.deleteMessage(chatId, messageId);
         deleted++;
       } catch {
-        /* message already deleted or too old */
+        /* already gone or too old */
+      }
+      if (stack) {
+        stack.pinned.delete(messageId);
+        stack.ephemeral = stack.ephemeral.filter((id) => id !== messageId);
       }
     }
-    stack.botMessages = stack.botMessages.filter((id) => stack.pinned.has(id));
+
     return deleted;
+  }
+
+  async flushBotMessages(bot, chatId, { except = [] } = {}) {
+    const enabled = await SettingsService.getChatCleanup();
+    if (!enabled) return 0;
+
+    const exceptSet = new Set((except || []).filter(Boolean));
+    const stack = this.stacks.get(Number(chatId));
+    if (!stack?.ephemeral.length) return 0;
+
+    const toDelete = stack.ephemeral.filter((id) => !exceptSet.has(id) && !stack.pinned.has(id));
+    stack.ephemeral = stack.ephemeral.filter((id) => exceptSet.has(id) || stack.pinned.has(id));
+    return this.deleteMessages(bot, chatId, toDelete, { keepPinned: true });
   }
 
   async deleteUserMessage(bot, chatId, messageId) {
     if (!messageId) return;
-    try {
-      await bot.deleteMessage(chatId, messageId);
-    } catch {
-      /* ignore */
-    }
+    await this.deleteMessages(bot, chatId, [messageId], { keepPinned: false });
   }
 
   async deleteUserMessageIfEnabled(bot, chatId, messageId) {
@@ -83,14 +116,43 @@ class ChatCleanupService {
   async releasePinnedMessage(bot, chatId, messageId) {
     if (!messageId) return;
     const stack = this.stacks.get(Number(chatId));
-    if (!stack) return;
-    stack.pinned.delete(messageId);
-    stack.botMessages = stack.botMessages.filter((id) => id !== messageId);
+    if (stack) {
+      stack.pinned.delete(messageId);
+      stack.ephemeral = stack.ephemeral.filter((id) => id !== messageId);
+    }
     try {
       await bot.deleteMessage(chatId, messageId);
     } catch {
       /* already deleted */
     }
+  }
+
+  async ensureReplyKeyboard(bot, chatId, replyMarkup) {
+    if (!replyMarkup) return false;
+    if (this.hasReplyKeyboard(chatId)) return true;
+
+    let placeholder;
+    try {
+      placeholder = await bot.sendMessage(chatId, '\u200b', {
+        reply_markup: replyMarkup
+      });
+      this.markReplyKeyboardReady(chatId);
+    } catch (err) {
+      console.error('[ChatCleanupService] ensureReplyKeyboard send failed:', err.message);
+      return false;
+    }
+
+    if (placeholder?.message_id) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await bot.deleteMessage(chatId, placeholder.message_id);
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 120));
+        }
+      }
+    }
+    return true;
   }
 }
 
