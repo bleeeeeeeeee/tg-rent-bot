@@ -537,6 +537,24 @@ class MenuService {
         return { reply_markup: { inline_keyboard: keyboard } };
     }
 
+    static getTopicReferenceListMenu(items, page, totalPages, ui = null, locale = 'ru') {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const _t = (k, p) => require('../i18n').t(k, p, locale);
+        const keyboard = items.map((item) => [
+            { text: item.buttonLabel, callback_data: `topic_ref_${item.refId}` }
+        ]);
+
+        const nav = [];
+        if (page > 0) nav.push({ text: UiStyleService.usesEmojis(style) ? '◀️' : '◀', callback_data: `topic_ref_page_${page - 1}` });
+        if (totalPages > 1) nav.push({ text: `${page + 1}/${totalPages}`, callback_data: 'noop' });
+        if (page < totalPages - 1) nav.push({ text: UiStyleService.usesEmojis(style) ? '▶️' : '▶', callback_data: `topic_ref_page_${page + 1}` });
+        if (nav.length) keyboard.push(nav);
+
+        keyboard.push([{ text: _t('topics.back_modes'), callback_data: 'publish_mode_topics' }]);
+        return { reply_markup: { inline_keyboard: keyboard } };
+    }
+
     static getHistoryListMenu(items, page, totalPages, ui = null) {
         const UiStyleService = require('./UiStyleService');
         const style = ui || { useEmojis: true, navStyle: 'text' };

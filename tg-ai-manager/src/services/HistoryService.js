@@ -70,21 +70,34 @@ class HistoryService {
     return LIFECYCLE_LABELS[status] || '';
   }
 
-  static _listTitle(post) {
-    const id = post.id ?? post.channelMessageId;
-    if (post.title?.trim()) return this.truncatePreview(post.title, 42);
-    if (post.mainIdea?.trim()) return this.truncatePreview(post.mainIdea, 42);
-    const body = post.post || post.preview || '';
-    if (body.trim()) return this.truncatePreview(body, 42);
-    if (post.media) return `Медиа #${id}`;
-    return id ? `Пост #${id}` : 'Без названия';
+  static _mediaTypeLabel(type, locale = 'ru') {
+    const key = `history.media.${type}`;
+    const translated = t(key, null, locale);
+    return translated !== key ? translated : type;
   }
 
-  static _buildButtonLabel(kind, sortAt, post, timezone) {
-    const date = this.formatShortDate(sortAt, timezone);
+  static _listTitle(post, locale = 'ru') {
+    const id = post.id ?? post.channelMessageId;
+    if (post.title?.trim()) return this.truncatePreview(post.title, 42, locale);
+    if (post.mainIdea?.trim()) return this.truncatePreview(post.mainIdea, 42, locale);
+    const body = post.post || post.preview || '';
+    if (body.trim()) return this.truncatePreview(body, 42, locale);
+    if (post.media) {
+      const type = this._mediaTypeLabel(post.media.type || 'media', locale);
+      return t('history.list.media_only', { type, id }, locale);
+    }
+    return id ? t('history.list.post_number', { id }, locale) : t('history.no_text', null, locale);
+  }
+
+  static _buildButtonLabel(kind, sortAt, post, timezone, { albumMediaCount = 0, locale = 'ru' } = {}) {
+    const date = this.formatShortDate(sortAt, timezone, locale);
     const prefix = post.lifecycleStatus ? this._lifecyclePrefix(post.lifecycleStatus) : '';
-    const title = this._listTitle(post);
-    return prefix ? `${date} · ${prefix}${title}` : `${date} · ${title}`;
+    const title = this._listTitle(post, locale);
+    let label = prefix ? `${date} · ${prefix}${title}` : `${date} · ${title}`;
+    if (albumMediaCount > 1) {
+      label += ` · 🖼×${albumMediaCount}`;
+    }
+    return label;
   }
 
   static async _loadDeleted(timezone) {
@@ -119,12 +132,14 @@ class HistoryService {
     }));
   }
 
-  static async _loadPublished(timezone) {
+  static async _loadPublished(timezone, locale = 'ru') {
     let allPosts = await ExistingPosts.getAll();
     let posts = allPosts.filter((p) => p.lifecycleStatus !== 'deleted');
     posts = posts.filter((p) => !shouldHideFromList(p, allPosts));
     posts = posts.filter((p) => !isEmptyPost(p));
-    return posts.map((p) => ({
+    return posts.map((p) => {
+      const albumMediaCount = countAlbumMedia(p, allPosts);
+      return {
       kind: 'published',
       refId: String(p.id),
       sortAt: p.lifecycleStatus === 'deleted' ? p.deletedAt || p.added : p.added,
@@ -145,8 +160,10 @@ class HistoryService {
       postOriginal: p.postOriginal,
       editHistory: p.editHistory,
       editCount: countEdits(p),
-      buttonLabel: this._buildButtonLabel('published', p.added, p, timezone)
-    }));
+      albumMediaCount,
+      buttonLabel: this._buildButtonLabel('published', p.added, p, timezone, { albumMediaCount, locale })
+    };
+    });
   }
 
   static async _loadScheduled(timezone) {
@@ -186,7 +203,7 @@ class HistoryService {
     let items = [];
 
     if (filter === 'published' || filter === 'all') {
-      items = items.concat(await this._loadPublished(timezone));
+      items = items.concat(await this._loadPublished(timezone, locale));
     }
     if (filter === 'deleted' || filter === 'all') {
       items = items.concat(await this._loadDeleted(timezone));
@@ -273,6 +290,19 @@ class HistoryService {
     }
 
     return null;
+  }
+
+  static formatReferenceListHeader(result, locale = null) {
+    const loc = locale || result.locale || 'ru';
+    const { total, page, pages } = result;
+    if (total === 0) {
+      return `💡 <b>${t('topics.ref_list.title', null, loc)}</b>\n\n${t('topics.no_posts', null, loc)}`;
+    }
+    let header = `💡 <b>${t('topics.ref_list.title', null, loc)}</b>`;
+    if (pages > 1) {
+      header += `\n${t('topics.ref_list.page', { total, page: page + 1, pages }, loc)}`;
+    }
+    return header;
   }
 
   static formatListHeader(result) {

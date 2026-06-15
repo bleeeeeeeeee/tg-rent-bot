@@ -1,12 +1,10 @@
 const TopicIdeasService = require('../services/TopicIdeasService');
 const WritingService = require('../services/WritingService');
-const ExistingPosts = require('../services/ExistingPosts');
 const DraftService = require('../services/DraftService');
 const MenuService = require('../services/MenuService');
 const UiStyleService = require('../services/UiStyleService');
 const stateManager = require('../services/StateManager');
 const HistoryService = require('../services/HistoryService');
-const UserSettingsService = require('../services/UserSettingsService');
 const { t } = require('../i18n');
 
 class TopicHandlers {
@@ -71,32 +69,34 @@ class TopicHandlers {
     );
   }
 
-  async showReferencePicker(userId) {
+  async showReferencePicker(userId, page = 0) {
     const loc = await this.locale(userId);
-    const posts = (await ExistingPosts.getAll(false))
-      .filter((p) => p.lifecycleStatus !== 'deleted')
-      .sort((a, b) => new Date(b.added || 0) - new Date(a.added || 0))
-      .slice(0, 8);
+    const ui = await UiStyleService.get(userId);
+    const result = await HistoryService.list({ filter: 'published', page, userId });
 
-    if (!posts.length) {
+    if (result.total === 0) {
       return this.bs.sendMessage(
         userId,
-        t('topics.no_posts', null, loc),
-        await MenuService.getTopicModeMenu(await UiStyleService.get(userId), loc)
+        HistoryService.formatReferenceListHeader(result, loc),
+        {
+          parse_mode: 'HTML',
+          ...(await MenuService.getTopicModeMenu(ui, loc))
+        }
       );
     }
 
-    stateManager.set(userId, { mode: 'topic_pick_reference' });
-    const tz = await UserSettingsService.getTimezone(userId);
-    const rows = posts.map((p) => {
-      const label = HistoryService._buildButtonLabel('published', p.added, p, tz);
-      return [{ text: label.slice(0, 60), callback_data: `topic_ref_${p.id}` }];
-    });
-    rows.push([{ text: t('topics.back_modes', null, loc), callback_data: 'publish_mode_topics' }]);
+    stateManager.set(userId, { mode: 'topic_pick_reference', topicRefPage: result.page });
 
-    return this.bs.sendMessage(userId, t('topics.ref_prompt', null, loc), {
-      reply_markup: { inline_keyboard: rows }
+    await this.bs.sendMessage(userId, HistoryService.formatReferenceListHeader(result, loc), {
+      parse_mode: 'HTML'
     });
+
+    return this.bs.sendMessage(
+      userId,
+      t('topics.ref_list.pick', null, loc),
+      MenuService.getTopicReferenceListMenu(result.items, result.page, result.pages, ui, loc),
+      { append: true }
+    );
   }
 
   async runGeneration(userId, count) {
@@ -244,9 +244,16 @@ class TopicHandlers {
       return this.showDirectionPrompt(userId, cfg.mode, cfg.referencePostIds || []);
     }
 
+    const refPageMatch = data.match(/^topic_ref_page_(\d+)$/);
+    if (refPageMatch) {
+      return this.showReferencePicker(userId, Number(refPageMatch[1]));
+    }
+
     const refMatch = data.match(/^topic_ref_(\d+)$/);
     if (refMatch) {
-      return this.showDirectionPrompt(userId, 'similar', [Number(refMatch[1])]);
+      const item = await HistoryService.getItem({ kind: 'published', refId: refMatch[1] });
+      const refId = item ? Number(item.refId) : Number(refMatch[1]);
+      return this.showDirectionPrompt(userId, 'similar', [refId]);
     }
 
     const countMatch = data.match(/^topic_count_(\d+)$/);
