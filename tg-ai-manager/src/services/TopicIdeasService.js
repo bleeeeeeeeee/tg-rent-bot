@@ -122,13 +122,12 @@ class TopicIdeasService {
       systemPrompt: TOPIC_SYSTEM_PROMPT
     });
 
-    const topics = parseTopicResponse(raw);
+    const topics = parseTopicResponse(raw).slice(0, count);
 
     if (!topics.length) {
       throw new Error('ИИ не вернул темы. Попробуйте ещё раз или смените модель.');
     }
 
-    topics = topics.slice(0, count);
     await this.appendTopicHistory(topics, mode);
     return { topics, mode, referencePostIds };
   }
