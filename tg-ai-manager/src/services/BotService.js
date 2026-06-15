@@ -52,6 +52,7 @@ const WORKFLOW_MODES = new Set([
   'waiting_custom_ai_edit_model',
   'waiting_channel_edit_text',
   'topic_choose_count',
+  'topic_choose_direction',
   'topic_generating',
   'topic_review',
   'topic_pick_reference'
@@ -133,6 +134,12 @@ class BotService {
     const msg = message || (await this.tLoc('menu.guest.blocked', null, userId));
     await this.sendMessage(userId, msg);
     return false;
+  }
+
+  async goToMainMenu(userId, message = null) {
+    await this.clearState(userId);
+    const text = message || (await this.tLoc('menu.main.choose', null, userId));
+    return this.sendMessage(userId, text, await this.getMainMenuFor(userId));
   }
 
   async clearState(userId, { releaseStaging = true, keepPinnedIds = [] } = {}) {
@@ -512,6 +519,10 @@ class BotService {
 
     const state = stateManager.get(userId);
 
+    if (data === 'menu_main') {
+      return this.goToMainMenu(userId);
+    }
+
     if (data === 'cancel') {
       const fromHistory = state?.mode === 'history_view';
       if (WORKFLOW_MODES.has(state?.mode) || state?.mode === 'waiting_post') {
@@ -541,11 +552,7 @@ class BotService {
     }
 
     if (data === 'menu_start') {
-      if (WORKFLOW_MODES.has(state?.mode) || state?.mode === 'waiting_post') {
-        return this.promptWorkflowExit(userId, state);
-      }
-      await this.clearState(userId);
-      return this.sendMessage(userId, 'Выберите действие:', await this.getMainMenuFor(userId));
+      return this.goToMainMenu(userId);
     }
 
     if (data === 'access_logout') {
@@ -728,12 +735,7 @@ class BotService {
 
     if (msg.text && (await MenuService.getReplyMenuLabels()).includes(msg.text)) {
       await ChatCleanupService.consumeUserMessage(this.bot, msg);
-      const menuState = stateManager.get(userId);
-      if (menuState && (WORKFLOW_MODES.has(menuState.mode) || menuState.mode === 'waiting_post')) {
-        return this.promptWorkflowExit(userId, menuState);
-      }
-      await this.clearState(userId);
-      return this.sendMessage(userId, await this.tLoc('menu.main.choose', null, userId), await this.getMainMenuFor(userId));
+      return this.goToMainMenu(userId);
     }
 
     if (msg.text?.startsWith('/')) return;
@@ -809,6 +811,9 @@ class BotService {
 
     const historyHandled = await this.historyHandlers.handleMessageStep(userId, msg, state);
     if (historyHandled !== false) return;
+
+    const topicHandled = await this.topicHandlers.handleMessage(userId, msg, state);
+    if (topicHandled !== false) return;
 
     if (state.mode === 'waiting_time') {
       const t = msg.text?.trim();

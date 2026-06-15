@@ -58,7 +58,7 @@ class MenuService {
                     [{ text: this._L(ui, '📤', this._t('publish.ready', loc)), callback_data: 'publish_mode_ready' }],
                     [{ text: this._L(ui, '✨', this._t('publish.ai', loc)), callback_data: 'publish_mode_ai' }],
                     [{ text: this._L(ui, '💡', this._t('publish.topics', loc)), callback_data: 'publish_mode_topics' }],
-                    [{ text: UiStyleService.backLabel(ui), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(ui, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -74,7 +74,21 @@ class MenuService {
                     [{ text: this._L(style, '🆕', _t('topics.mode.unique')), callback_data: 'topic_mode_unique' }],
                     [{ text: this._L(style, '🔁', _t('topics.mode.similar')), callback_data: 'topic_mode_similar' }],
                     [{ text: this._L(style, '📎', _t('topics.mode.similar_ref')), callback_data: 'topic_mode_similar_ref' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'menu_publish' }]
+                    [{ text: UiStyleService.backLabel(style, _t('topics.back_modes', null)), callback_data: 'menu_publish' }]
+                ]
+            }
+        };
+    }
+
+    static getTopicDirectionMenu(ui = null, locale = 'ru') {
+        const UiStyleService = require('./UiStyleService');
+        const style = ui || { useEmojis: true, navStyle: 'text' };
+        const _t = (k, p) => require('../i18n').t(k, p, locale);
+        return {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: this._L(style, '⏭', _t('topics.direction_skip')), callback_data: 'topic_direction_skip' }],
+                    [{ text: UiStyleService.backLabel(style, _t('topics.back_modes', null)), callback_data: 'publish_mode_topics' }]
                 ]
             }
         };
@@ -91,7 +105,7 @@ class MenuService {
                         { text: '5', callback_data: 'topic_count_5' },
                         { text: '8', callback_data: 'topic_count_8' }
                     ],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'publish_mode_topics' }]
+                    [{ text: UiStyleService.backLabel(style, require('../i18n').t('topics.back_direction', null, locale)), callback_data: 'topic_back_direction' }]
                 ]
             }
         };
@@ -105,30 +119,34 @@ class MenuService {
             { text: `${i + 1}. ${String(t.title).slice(0, 40)}`, callback_data: `topic_pick_${i}` }
         ]);
         rows.push([{ text: this._L(style, '🔄', _t('topics.regenerate')), callback_data: 'topic_regenerate' }]);
-        rows.push([{ text: UiStyleService.backLabel(style), callback_data: 'menu_publish' }]);
+        rows.push([{ text: UiStyleService.backLabel(style, _t('topics.back_modes', null)), callback_data: 'publish_mode_topics' }]);
         return { reply_markup: { inline_keyboard: rows } };
     }
 
-    static getTopicActionMenu(index, ui = null, locale = 'ru') {
+    static getTopicActionMenu(index, ui = null, locale = 'ru', { draftId } = {}) {
         const UiStyleService = require('./UiStyleService');
         const style = ui || { useEmojis: true, navStyle: 'text' };
         const _t = (k, p) => require('../i18n').t(k, p, locale);
-        return {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: this._L(style, '✨', _t('topics.action.wizard')), callback_data: `topic_use_wizard_${index}` }],
-                    [{ text: this._L(style, '💾', _t('topics.action.draft')), callback_data: `topic_save_draft_${index}` }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'publish_mode_topics' }]
-                ]
-            }
-        };
+        const rows = [
+            [{ text: this._L(style, '✨', _t('topics.action.wizard')), callback_data: `topic_use_wizard_${index}` }]
+        ];
+        if (draftId) {
+            rows.push([{ text: this._L(style, '❌', _t('topics.action.delete_draft')), callback_data: `draft_topic_delete_${draftId}` }]);
+        } else {
+            rows.push([{ text: this._L(style, '💾', _t('topics.action.draft')), callback_data: `topic_save_draft_${index}` }]);
+        }
+        rows.push([{
+            text: UiStyleService.backLabel(style, draftId ? _t('common.back', null) : _t('topics.back_modes', null)),
+            callback_data: draftId ? 'menu_drafts' : 'publish_mode_topics'
+        }]);
+        return { reply_markup: { inline_keyboard: rows } };
     }
 
-    static getNavRow(target = 'main', ui = null) {
+    static getNavRow(target = 'main', ui = null, locale = 'ru') {
         const UiStyleService = require('./UiStyleService');
         const style = ui || { useEmojis: true, navStyle: 'text' };
         const callbacks = {
-            main: 'cancel',
+            main: 'menu_main',
             settings: 'settings_back_root',
             settings_ai: 'settings_ai',
             settings_general: 'settings_general',
@@ -140,7 +158,7 @@ class MenuService {
             admin_maintenance: 'admin_maintenance'
         };
         const labels = {
-            main: UiStyleService.backLabel(style),
+            main: UiStyleService.mainMenuLabel(style, locale),
             settings: UiStyleService.backLabel(style, 'Назад'),
             settings_ai: UiStyleService.backLabel(style, 'Назад'),
             settings_general: UiStyleService.backLabel(style, 'Назад'),
@@ -153,7 +171,7 @@ class MenuService {
         };
         return [[{
             text: labels[target] || UiStyleService.backLabel(style),
-            callback_data: callbacks[target] || 'cancel'
+            callback_data: callbacks[target] || 'menu_main'
         }]];
     }
 
@@ -405,7 +423,7 @@ class MenuService {
             }
             return [{ text: this._L(style, '✏️', 'Пост'), callback_data: `draft_select_${d.id}` }];
         });
-        keyboard.push([{ text: UiStyleService.backLabel(style), callback_data: 'cancel_discard' }]);
+        keyboard.push([{ text: UiStyleService.mainMenuLabel(style), callback_data: 'menu_main' }]);
         return { reply_markup: { inline_keyboard: keyboard } };
     }
 
@@ -514,7 +532,7 @@ class MenuService {
         }]));
         keyboard.push(
             [{ text: UiStyleService.backLabel(style, this._t('common.back', loc)), callback_data: 'history_back' }],
-            [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+            [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -536,7 +554,7 @@ class MenuService {
         if (page < totalPages - 1) nav.push({ text: UiStyleService.usesEmojis(style) ? '▶️' : '▶', callback_data: `history_page_${page + 1}` });
         if (nav.length) keyboard.push(nav);
 
-        keyboard.push([{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]);
+        keyboard.push([{ text: UiStyleService.mainMenuLabel(style), callback_data: 'menu_main' }]);
         return { reply_markup: { inline_keyboard: keyboard } };
     }
 
@@ -651,7 +669,7 @@ class MenuService {
                     [{ text: UiStyleService.optionalEmoji(style, '🤖', this._t('settings.ai', loc)), callback_data: 'settings_ai' }],
                     [{ text: UiStyleService.optionalEmoji(style, '🎨', this._t('settings.appearance', loc)), callback_data: 'settings_appearance' }],
                     [{ text: UiStyleService.optionalEmoji(style, '🌍', this._t('settings.general', loc)), callback_data: 'settings_general' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -672,7 +690,7 @@ class MenuService {
                         callback_data: 'settings_appearance_nav'
                     }],
                     [{ text: UiStyleService.backLabel(ui, 'Назад'), callback_data: 'settings_back_root' }],
-                    [{ text: UiStyleService.backLabel(ui), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(ui), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -694,7 +712,7 @@ class MenuService {
                         callback_data: 'settings_ui_nav_arrows'
                     }],
                     [{ text: UiStyleService.backLabel(ui, 'Назад'), callback_data: 'settings_appearance' }],
-                    [{ text: UiStyleService.backLabel(ui), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(ui), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -725,7 +743,7 @@ class MenuService {
         }]);
         keyboard.push(
             [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_back_root' }],
-            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'menu_main' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -743,7 +761,7 @@ class MenuService {
         }
         keyboard.push(
             [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai' }],
-            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'menu_main' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -756,7 +774,7 @@ class MenuService {
                     [{ text: '➕ ' + this._t('settings.ai.custom_api', loc), callback_data: 'settings_ai_custom_start' }],
                     [{ text: '✏️ ' + this._t('settings.ai.custom.edit', loc), callback_data: 'settings_ai_custom_manage' }],
                     [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai' }],
-                    [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+                    [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -771,7 +789,7 @@ class MenuService {
         });
         keyboard.push(
             [{ text: '↩️ Назад', callback_data: 'settings_ai_active' }],
-            [{ text: '↩️ Главное меню', callback_data: 'cancel' }]
+            [{ text: '↩️ Главное меню', callback_data: 'menu_main' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -788,7 +806,7 @@ class MenuService {
         );
         keyboard.push(
             [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai' }],
-            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'menu_main' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -800,7 +818,7 @@ class MenuService {
         });
         keyboard.push(
             [{ text: '↩️ Назад', callback_data: 'settings_ai_active' }],
-            [{ text: '↩️ Главное меню', callback_data: 'cancel' }]
+            [{ text: '↩️ Главное меню', callback_data: 'menu_main' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -823,7 +841,7 @@ class MenuService {
                 callback_data: 'settings_toggle_cleanup'
             }],
             [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_back_root' }],
-            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'menu_main' }]
         ];
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -838,7 +856,7 @@ class MenuService {
         keyboard.push(
             [{ text: '✏️ ' + (loc === 'en' ? 'Enter manually' : 'Ввести вручную'), callback_data: 'settings_tz_manual' }],
             [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_general' }],
-            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'menu_main' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -852,7 +870,7 @@ class MenuService {
                     [{ text: `${sel(currentLocale === 'ru')}${this._t('settings.lang.ru', loc)}`, callback_data: 'settings_lang_ru' }],
                     [{ text: `${sel(currentLocale === 'en')}${this._t('settings.lang.en', loc)}`, callback_data: 'settings_lang_en' }],
                     [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_general' }],
-                    [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+                    [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -863,7 +881,7 @@ class MenuService {
             reply_markup: {
                 inline_keyboard: [
                     [{ text: '↩️ Назад', callback_data: 'settings_back_root' }],
-                    [{ text: '↩️ Главное меню', callback_data: 'cancel' }]
+                    [{ text: '↩️ Главное меню', callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -881,7 +899,7 @@ class MenuService {
                     [{ text: UiStyleService.optionalEmoji(style, '📊', this._t('admin.section.system', loc)), callback_data: 'admin_system' }],
                     [{ text: UiStyleService.optionalEmoji(style, '🛠', this._t('admin.section.maintenance', loc)), callback_data: 'admin_maintenance' }],
                     [{ text: UiStyleService.optionalEmoji(style, '🚪', this._t('admin.logout', loc)), callback_data: 'admin_logout' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -900,7 +918,7 @@ class MenuService {
                     [{ text: UiStyleService.optionalEmoji(style, '📜', this._t('admin.access.audit', loc)), callback_data: 'admin_access_audit' }],
                     [{ text: UiStyleService.optionalEmoji(style, '👤', this._t('admin.access.guest_drafts_edit', loc)), callback_data: 'admin_access_guest_drafts_toggle' }],
                     [{ text: UiStyleService.backLabel(style, this._t('admin.back.hub', loc)), callback_data: 'admin_hub' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -917,7 +935,7 @@ class MenuService {
                     [{ text: UiStyleService.optionalEmoji(style, '➕', this._t('admin.access.invite_168', loc)), callback_data: 'admin_access_invite_168' }],
                     [{ text: UiStyleService.optionalEmoji(style, '✏️', this._t('admin.access.invite_custom', loc)), callback_data: 'admin_access_invite_custom' }],
                     [{ text: UiStyleService.backLabel(style, this._t('common.back', loc)), callback_data: 'admin_access' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -936,7 +954,7 @@ class MenuService {
                     [{ text: UiStyleService.optionalEmoji(style, '🔗', this._t('admin.cloud.menu.credentials', loc)), callback_data: 'admin_cloud_credentials' }],
                     [{ text: UiStyleService.optionalEmoji(style, '📥', this._t('admin.cloud.menu.backup', loc)), callback_data: 'admin_cloud_backup' }],
                     [{ text: UiStyleService.backLabel(style, this._t('admin.back.hub', loc)), callback_data: 'admin_hub' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -954,7 +972,7 @@ class MenuService {
                     [{ text: `${sel(mode === 'supabase')}${this._t('admin.cloud.mode.supabase', loc)}`, callback_data: 'admin_cloud_mode_supabase' }],
                     [{ text: `${sel(mode === 'dual')}${this._t('admin.cloud.mode.dual', loc)}`, callback_data: 'admin_cloud_mode_dual' }],
                     [{ text: UiStyleService.backLabel(style, this._t('common.back', loc)), callback_data: 'admin_cloud' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -972,7 +990,7 @@ class MenuService {
                     [{ text: UiStyleService.optionalEmoji(style, '⬆️', this._t('admin.cloud.push', loc)), callback_data: 'admin_cloud_push' }],
                     [{ text: UiStyleService.optionalEmoji(style, '⬇️', this._t('admin.cloud.pull', loc)), callback_data: 'admin_cloud_pull' }],
                     [{ text: UiStyleService.backLabel(style, this._t('common.back', loc)), callback_data: 'admin_cloud' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -989,7 +1007,7 @@ class MenuService {
                     [{ text: UiStyleService.optionalEmoji(style, '🔑', this._t('admin.cloud.url', loc)), callback_data: 'admin_cloud_url' }],
                     [{ text: UiStyleService.optionalEmoji(style, '🔑', this._t('admin.cloud.key', loc)), callback_data: 'admin_cloud_key' }],
                     [{ text: UiStyleService.backLabel(style, this._t('common.back', loc)), callback_data: 'admin_cloud' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -1004,7 +1022,7 @@ class MenuService {
                 inline_keyboard: [
                     [{ text: UiStyleService.optionalEmoji(style, '📥', this._t('admin.cloud.export', loc)), callback_data: 'admin_cloud_export' }],
                     [{ text: UiStyleService.backLabel(style, this._t('common.back', loc)), callback_data: 'admin_cloud' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -1020,7 +1038,7 @@ class MenuService {
                     [{ text: UiStyleService.optionalEmoji(style, '🔄', this._t('admin.maintenance.reconcile', loc)), callback_data: 'admin_maintenance_reconcile' }],
                     [{ text: UiStyleService.optionalEmoji(style, '📥', this._t('admin.maintenance.backup', loc)), callback_data: 'admin_cloud_export' }],
                     [{ text: UiStyleService.backLabel(style, this._t('admin.back.hub', loc)), callback_data: 'admin_hub' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -1036,7 +1054,7 @@ class MenuService {
         }]);
         keyboard.push(
             [{ text: UiStyleService.backLabel(style, this._t('common.back', loc)), callback_data: 'admin_access' }],
-            [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+            [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -1047,7 +1065,7 @@ class MenuService {
             reply_markup: {
                 inline_keyboard: [
                     [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai_custom_back' }],
-                    [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+                    [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'menu_main' }]
                 ]
             }
         };
@@ -1064,7 +1082,7 @@ class MenuService {
         keyboard.push(
             [{ text: '➕ ' + this._t('settings.ai.custom_api', loc), callback_data: 'settings_ai_custom_add' }],
             [{ text: '↩️ ' + this._t('common.back', loc), callback_data: 'settings_ai' }],
-            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'cancel' }]
+            [{ text: '↩️ ' + this._t('common.main_menu', loc), callback_data: 'menu_main' }]
         );
         return { reply_markup: { inline_keyboard: keyboard } };
     }
@@ -1081,7 +1099,7 @@ class MenuService {
                     [{ text: '🔑 ' + (loc === 'en' ? 'API key' : 'Ключ API'), callback_data: `settings_ai_edit_${providerId}_key` }],
                     [{ text: '🧠 ' + (loc === 'en' ? 'Model' : 'Модель'), callback_data: `settings_ai_edit_${providerId}_model` }],
                     [{ text: UiStyleService.backLabel(style, this._t('settings.ai.custom.edit', loc)), callback_data: 'settings_ai_custom_manage' }],
-                    [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+                    [{ text: UiStyleService.mainMenuLabel(style, loc), callback_data: 'menu_main' }]
                 ]
             }
         };

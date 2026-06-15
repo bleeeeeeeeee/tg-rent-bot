@@ -58,8 +58,13 @@ class UiStyleService {
     return `${emoji} ${text}`;
   }
 
-  static backLabel(ui, text = 'Главное меню') {
+  static backLabel(ui, text = 'Назад') {
     return this.optionalEmoji(ui, '↩️', text);
+  }
+
+  static mainMenuLabel(ui, locale = 'ru') {
+    const { t } = require('../i18n');
+    return this.optionalEmoji(ui, '↩️', t('common.main_menu', null, locale));
   }
 
   static replyMenuLabel(ui) {

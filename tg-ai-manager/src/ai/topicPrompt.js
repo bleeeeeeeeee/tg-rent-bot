@@ -41,9 +41,13 @@ function parseTopicResponse(raw) {
     .filter((t) => t.title && t.brief);
 }
 
-function buildTopicUserPrompt({ mode, count, channelContext, usedTopics, referencePosts }) {
+function buildTopicUserPrompt({ mode, count, channelContext, usedTopics, referencePosts, direction }) {
   const lines = [`Режим: ${mode === 'unique' ? 'уникальные темы (новые для канала)' : 'темы в стиле канала (схожие с прошлыми)'}`];
   lines.push(`Количество тем: ${count}`);
+
+  if (direction?.trim()) {
+    lines.push(`\nНаправление / тематика / тип контента (приоритет):\n${direction.trim()}`);
+  }
 
   if (channelContext?.channelHint) {
     lines.push(`\nО канале:\n${channelContext.channelHint}`);

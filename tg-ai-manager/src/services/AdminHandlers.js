@@ -135,7 +135,7 @@ class AdminHandlers {
       reply_markup: {
         inline_keyboard: [
           [{ text: UiStyleService.backLabel(style, t('admin.back.hub', null, loc)), callback_data: 'admin_hub' }],
-          [{ text: UiStyleService.backLabel(style), callback_data: 'cancel' }]
+          [{ text: UiStyleService.mainMenuLabel(style), callback_data: 'menu_main' }]
         ]
       }
     });
@@ -457,7 +457,7 @@ class AdminHandlers {
       reply_markup: {
         inline_keyboard: [
           [{ text: UiStyleService.backLabel(ui, t('admin.back.hub', null, loc)), callback_data: 'admin_access' }],
-          [{ text: UiStyleService.backLabel(ui), callback_data: 'cancel' }]
+          [{ text: UiStyleService.mainMenuLabel(ui), callback_data: 'menu_main' }]
         ]
       }
     });

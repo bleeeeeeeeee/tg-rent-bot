@@ -86,7 +86,8 @@ class TopicIdeasService {
   static async generateTopics({
     mode = 'unique',
     count = 5,
-    referencePostIds = []
+    referencePostIds = [],
+    direction = null
   } = {}) {
     const ctx = await WritingService.resolveAi();
     if (!ctx) throw new Error('ИИ не настроен. Подключите сервис в Настройках → ИИ для постов.');
@@ -113,7 +114,8 @@ class TopicIdeasService {
       count,
       channelContext,
       usedTopics,
-      referencePosts
+      referencePosts,
+      direction
     });
 
     const raw = await AiProviderRegistry.completeRaw(ctx.providerId, userPrompt, {

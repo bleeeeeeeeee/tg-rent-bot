@@ -231,6 +231,10 @@ module.exports = {
   'topics.mode.similar': 'Channel style',
   'topics.mode.similar_ref': 'Similar to post…',
   'topics.count_prompt': 'How many topics to generate?',
+  'topics.direction_prompt': '💡 <b>Topic direction</b> (optional)\n\nDescribe the theme, format, or angle — e.g. «personal stories», «product reviews», «news digests».\n\nSend a message or tap Skip.',
+  'topics.direction_skip': 'Skip →',
+  'topics.back_direction': '← Direction',
+  'topics.direction_applied': 'Direction: {direction}',
   'topics.generating': '⏳ Generating topics…',
   'topics.result_unique': '🆕 <b>Unique topics</b> ({count}):',
   'topics.result_similar': '🔁 <b>Topics in channel style</b> ({count}):',
@@ -241,5 +245,7 @@ module.exports = {
   'topics.regenerate': 'Generate again',
   'topics.action.wizard': 'Write post with AI',
   'topics.action.draft': 'Save to drafts',
-  'topics.saved_draft': 'Topic «{title}» saved to drafts.'
+  'topics.action.delete_draft': 'Delete draft',
+  'topics.saved_draft': 'Topic «{title}» saved to drafts.',
+  'topics.deleted_draft': 'Topic draft deleted ✅'
 };

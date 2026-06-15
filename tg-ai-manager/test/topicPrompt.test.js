@@ -18,6 +18,18 @@ describe('topicPrompt', () => {
     assert.equal(topics[1].title, 'Тема 2');
   });
 
+  it('buildTopicUserPrompt includes direction when set', () => {
+    const prompt = buildTopicUserPrompt({
+      mode: 'similar',
+      count: 3,
+      channelContext: { channelHint: 'Test' },
+      usedTopics: [],
+      referencePosts: [],
+      direction: 'обзоры гаджетов'
+    });
+    assert.match(prompt, /обзоры гаджетов/);
+  });
+
   it('buildTopicUserPrompt includes mode and used topics', () => {
     const prompt = buildTopicUserPrompt({
       mode: 'unique',

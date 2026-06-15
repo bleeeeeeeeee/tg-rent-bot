@@ -15,7 +15,7 @@ class DraftHandlers {
 
   async handleCallback(userId, data, state) {
     const guestMutating =
-      /draft_(delete|edit|publish|wizard_delete|wizard_resume)/.test(data) ||
+      /draft_(delete|edit|publish|wizard_delete|wizard_resume|topic_delete)/.test(data) ||
       data === 'draft_publish_now';
     if (guestMutating && !(await this.bs.requireGuestAllowed(userId, null, { allowDraftsEdit: true }))) return;
 
@@ -54,6 +54,19 @@ class DraftHandlers {
       );
     }
 
+    const topicDeleteMatch = data.match(/^draft_topic_delete_(.+)$/);
+    if (topicDeleteMatch) {
+      await DraftService.remove(topicDeleteMatch[1]);
+      await this.bs.clearState(userId);
+      const loc = await this.bs.locale(userId);
+      const { t } = require('../i18n');
+      return this.bs.sendMessage(
+        userId,
+        t('topics.deleted_draft', null, loc),
+        await MenuService.getMainMenu(null, { locale: loc })
+      );
+    }
+
     const topicSelectMatch = data.match(/^draft_topic_(.+)$/);
     if (topicSelectMatch) {
       const draft = await DraftService.getById(userId, topicSelectMatch[1]);
@@ -71,7 +84,9 @@ class DraftHandlers {
       });
       return this.bs.sendMessage(userId, text, {
         parse_mode: 'HTML',
-        ...(await MenuService.getTopicActionMenu(0, await UiStyleService.get(userId), await this.bs.locale(userId)))
+        ...(await MenuService.getTopicActionMenu(0, await UiStyleService.get(userId), await this.bs.locale(userId), {
+          draftId: draft.id
+        }))
       });
     }
 

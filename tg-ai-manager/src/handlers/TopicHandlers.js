@@ -39,11 +39,30 @@ class TopicHandlers {
     );
   }
 
-  async showCountMenu(userId, mode, referencePostIds = []) {
+  async showDirectionPrompt(userId, mode, referencePostIds = []) {
     const loc = await this.locale(userId);
     stateManager.set(userId, {
+      mode: 'topic_choose_direction',
+      topics: { mode, referencePostIds, direction: null }
+    });
+    return this.bs.sendMessage(
+      userId,
+      t('topics.direction_prompt', null, loc),
+      { parse_mode: 'HTML', ...(await MenuService.getTopicDirectionMenu(await UiStyleService.get(userId), loc)) }
+    );
+  }
+
+  async showCountMenu(userId, mode, referencePostIds = [], direction = null) {
+    const loc = await this.locale(userId);
+    const state = stateManager.get(userId) || {};
+    const cfg = state.topics || {};
+    stateManager.set(userId, {
       mode: 'topic_choose_count',
-      topics: { mode, referencePostIds }
+      topics: {
+        mode,
+        referencePostIds,
+        direction: direction ?? cfg.direction ?? null
+      }
     });
     return this.bs.sendMessage(
       userId,
@@ -83,7 +102,7 @@ class TopicHandlers {
   async runGeneration(userId, count) {
     const loc = await this.locale(userId);
     const state = stateManager.get(userId) || {};
-    const cfg = state.topics || { mode: 'unique', referencePostIds: [] };
+    const cfg = state.topics || { mode: 'unique', referencePostIds: [], direction: null };
 
     state.mode = 'topic_generating';
     stateManager.set(userId, state);
@@ -93,7 +112,8 @@ class TopicHandlers {
       const result = await TopicIdeasService.generateTopics({
         mode: cfg.mode,
         count,
-        referencePostIds: cfg.referencePostIds || []
+        referencePostIds: cfg.referencePostIds || [],
+        direction: cfg.direction || null
       });
 
       state.mode = 'topic_review';
@@ -104,10 +124,13 @@ class TopicHandlers {
         cfg.mode === 'unique'
           ? t('topics.result_unique', { count: result.topics.length }, loc)
           : t('topics.result_similar', { count: result.topics.length }, loc);
+      const directionNote = cfg.direction
+        ? `\n\n<i>${t('topics.direction_applied', { direction: cfg.direction }, loc)}</i>`
+        : '';
 
       return this.bs.sendMessage(
         userId,
-        `${header}\n\n${TopicIdeasService.formatTopicList(result.topics, loc)}`,
+        `${header}${directionNote}\n\n${TopicIdeasService.formatTopicList(result.topics, loc)}`,
         {
           parse_mode: 'HTML',
           ...(await MenuService.getTopicResultsMenu(result.topics, await UiStyleService.get(userId), loc))
@@ -145,9 +168,10 @@ class TopicHandlers {
       (topic.angle ? `\n\n💡 ${topic.angle}` : '') +
       (topic.tags?.length ? `\n\n🏷 ${topic.tags.join(', ')}` : '');
 
+    const draftId = state.topics?.draftId || null;
     return this.bs.sendMessage(userId, text, {
       parse_mode: 'HTML',
-      ...(await MenuService.getTopicActionMenu(index, await UiStyleService.get(userId), loc))
+      ...(await MenuService.getTopicActionMenu(index, await UiStyleService.get(userId), loc, { draftId }))
     });
   }
 
@@ -183,23 +207,46 @@ class TopicHandlers {
     );
   }
 
+  async handleMessage(userId, msg, state) {
+    if (state?.mode !== 'topic_choose_direction') return false;
+    const text = msg.text?.trim();
+    if (!text) return false;
+
+    const cfg = state.topics || {};
+    stateManager.set(userId, {
+      ...state,
+      topics: { ...cfg, direction: text.slice(0, 500) }
+    });
+    return this.showCountMenu(userId, cfg.mode, cfg.referencePostIds || [], text.slice(0, 500));
+  }
+
   async handleCallback(userId, data) {
     if (data === 'publish_mode_topics') {
       return this.showEntry(userId);
     }
     if (data === 'topic_mode_unique') {
-      return this.showCountMenu(userId, 'unique');
+      return this.showDirectionPrompt(userId, 'unique');
     }
     if (data === 'topic_mode_similar') {
-      return this.showCountMenu(userId, 'similar');
+      return this.showDirectionPrompt(userId, 'similar');
     }
     if (data === 'topic_mode_similar_ref') {
       return this.showReferencePicker(userId);
     }
+    if (data === 'topic_direction_skip') {
+      const state = stateManager.get(userId) || {};
+      const cfg = state.topics || { mode: 'unique', referencePostIds: [] };
+      return this.showCountMenu(userId, cfg.mode, cfg.referencePostIds || [], null);
+    }
+    if (data === 'topic_back_direction') {
+      const state = stateManager.get(userId) || {};
+      const cfg = state.topics || { mode: 'unique', referencePostIds: [] };
+      return this.showDirectionPrompt(userId, cfg.mode, cfg.referencePostIds || []);
+    }
 
     const refMatch = data.match(/^topic_ref_(\d+)$/);
     if (refMatch) {
-      return this.showCountMenu(userId, 'similar', [Number(refMatch[1])]);
+      return this.showDirectionPrompt(userId, 'similar', [Number(refMatch[1])]);
     }
 
     const countMatch = data.match(/^topic_count_(\d+)$/);

@@ -231,6 +231,10 @@ module.exports = {
   'topics.mode.similar': 'В стиле канала',
   'topics.mode.similar_ref': 'Похожие на пост…',
   'topics.count_prompt': 'Сколько тем сгенерировать?',
+  'topics.direction_prompt': '💡 <b>Направление тем</b> (необязательно)\n\nУкажите тематику, формат или угол — например: «личные истории», «обзоры продуктов», «дайджесты новостей».\n\nОтправьте сообщение или нажмите «Пропустить».',
+  'topics.direction_skip': 'Пропустить →',
+  'topics.back_direction': '← Направление',
+  'topics.direction_applied': 'Направление: {direction}',
   'topics.generating': '⏳ Генерирую темы…',
   'topics.result_unique': '🆕 <b>Уникальные темы</b> ({count}):',
   'topics.result_similar': '🔁 <b>Темы в стиле канала</b> ({count}):',
@@ -241,5 +245,7 @@ module.exports = {
   'topics.regenerate': 'Ещё раз',
   'topics.action.wizard': 'Написать пост с ИИ',
   'topics.action.draft': 'Сохранить в черновики',
-  'topics.saved_draft': 'Тема «{title}» сохранена в черновики.'
+  'topics.action.delete_draft': 'Удалить черновик',
+  'topics.saved_draft': 'Тема «{title}» сохранена в черновики.',
+  'topics.deleted_draft': 'Черновик темы удалён ✅'
 };
