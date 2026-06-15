@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseTopicResponse, buildTopicUserPrompt } = require('../src/ai/topicPrompt');
+const { parseTopicResponse, buildTopicUserPrompt, sanitizeTopicLanguage } = require('../src/ai/topicPrompt');
 
 describe('topicPrompt', () => {
   it('parseTopicResponse extracts topics from JSON', () => {
@@ -41,6 +41,40 @@ describe('topicPrompt', () => {
     assert.match(prompt, /уникальные/);
     assert.match(prompt, /Old topic/);
     assert.match(prompt, /Post A/);
+  });
+
+  it('buildTopicUserPrompt includes language rules', () => {
+    const prompt = buildTopicUserPrompt({
+      mode: 'unique',
+      count: 5,
+      channelContext: {},
+      usedTopics: [],
+      referencePosts: []
+    });
+    assert.match(prompt, /имен/i);
+    assert.match(prompt, /buildingов/i);
+  });
+
+  it('sanitizeTopicLanguage fixes anglicisms and hybrids', () => {
+    assert.equal(
+      sanitizeTopicLanguage('Изучение buildings и buildingов в кино'),
+      'Изучение здания и здание в кино'
+    );
+    assert.equal(
+      sanitizeTopicLanguage('роль street-art в городе'),
+      'роль street-art в городе'
+    );
+    assert.equal(sanitizeTopicLanguage('many own design'), 'много собственный дизайн');
+  });
+
+  it('parseTopicResponse sanitizes topic fields', () => {
+    const raw = JSON.stringify({
+      topics: [{ title: 'Тема', brief: 'Про buildings и buildingов', angle: 'style matters', tags: ['design'] }]
+    });
+    const topics = parseTopicResponse(raw);
+    assert.match(topics[0].brief, /здани/);
+    assert.doesNotMatch(topics[0].brief, /building/i);
+    assert.equal(topics[0].tags[0], 'дизайн');
   });
 });
 

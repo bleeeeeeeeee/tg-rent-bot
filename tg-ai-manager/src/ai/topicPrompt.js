@@ -1,8 +1,16 @@
+const { LANGUAGE_PRESETS } = require('./wizardPresets');
+
+const TOPIC_LANGUAGE_RULES =
+  `${LANGUAGE_PRESETS.names_proper.prompt} ` +
+  'Теги — на русском. На латинице в тегах — только имена и устоявшиеся термины (street-art). ' +
+  'Запрещено склонять английские слова по-русски: не «buildingов», «designа», «styleом». ' +
+  'Вместо buildings, design, style, trends, projects, space — пиши здания, дизайн, стиль, тренды, проекты, пространство.';
+
 const TOPIC_SYSTEM_PROMPT = `Ты редактор Telegram-канала. Предлагай идеи для будущих публикаций.
 
 Правила:
 1. Темы должны быть конкретными, пригодными для поста в Telegram (не абстрактные «о моде», а угол и повод).
-2. Язык — русский, естественный для канала.
+2. ${TOPIC_LANGUAGE_RULES}
 3. Не повторяй темы из списка «Уже было в канале» и «Уже предлагали ранее».
 4. Для режима similar — сохраняй стиль, тон и тип контента канала, но не копируй формулировки один в один.
 5. Для режима unique — предлагай свежие углы, которых ещё не было.
@@ -20,6 +28,87 @@ const TOPIC_SYSTEM_PROMPT = `Ты редактор Telegram-канала. Пре
   ]
 }`;
 
+const ALLOWED_LATIN_TERMS = new Set([
+  'street-art',
+  'streetwear',
+  'collab',
+  'high-fashion',
+  'art-deco',
+  'brutalism',
+  'bauhaus',
+  'off-white',
+  'pop-art'
+]);
+
+const LATIN_WORD_REPLACEMENTS = {
+  buildings: 'здания',
+  building: 'здание',
+  designs: 'дизайны',
+  design: 'дизайн',
+  styles: 'стили',
+  style: 'стиль',
+  trends: 'тренды',
+  trend: 'тренд',
+  projects: 'проекты',
+  project: 'проект',
+  spaces: 'пространства',
+  space: 'пространство',
+  examples: 'примеры',
+  example: 'пример',
+  authors: 'авторы',
+  author: 'автор',
+  environment: 'среда',
+  features: 'особенности',
+  feature: 'особенность',
+  comfort: 'комфорт',
+  citizens: 'горожане',
+  citizen: 'горожанин',
+  furniture: 'мебель',
+  landscape: 'ландшафт',
+  nature: 'природа',
+  ecology: 'экология',
+  sustainability: 'устойчивость',
+  architecture: 'архитектура',
+  interior: 'интерьер',
+  urban: 'городской',
+  public: 'общественный',
+  modern: 'современный',
+  functional: 'функциональный',
+  unique: 'уникальный',
+  analysis: 'анализ',
+  role: 'роль',
+  influence: 'влияние',
+  combination: 'сочетание',
+  creation: 'создание',
+  life: 'жизнь',
+  world: 'мир',
+  work: 'работа',
+  many: 'много',
+  own: 'собственный',
+  and: 'и',
+  the: ''
+};
+
+function replaceLatinWord(word) {
+  const lower = word.toLowerCase();
+  if (ALLOWED_LATIN_TERMS.has(lower)) return word;
+  if (LATIN_WORD_REPLACEMENTS[lower] !== undefined) return LATIN_WORD_REPLACEMENTS[lower];
+  return word;
+}
+
+function sanitizeTopicLanguage(text) {
+  let s = String(text || '');
+
+  s = s.replace(/(?<![a-zA-Z])([a-zA-Z]{2,})([а-яё]{1,5})(?![a-zA-Zа-яё])/gi, (_, stem) => {
+    const ru = LATIN_WORD_REPLACEMENTS[stem.toLowerCase()];
+    return ru || stem;
+  });
+
+  s = s.replace(/\b[a-zA-Z][a-zA-Z-]*(?![а-яё])/g, (word) => replaceLatinWord(word));
+
+  return s.replace(/\s{2,}/g, ' ').replace(/\s+([,.;:!?])/g, '$1').trim();
+}
+
 function extractJson(raw) {
   const text = String(raw || '').trim();
   if (!text) return '{}';
@@ -33,10 +122,12 @@ function parseTopicResponse(raw) {
   const topics = Array.isArray(parsed?.topics) ? parsed.topics : [];
   return topics
     .map((t) => ({
-      title: String(t.title || t.topic || '').trim(),
-      brief: String(t.brief || t.description || '').trim(),
-      angle: String(t.angle || '').trim(),
-      tags: Array.isArray(t.tags) ? t.tags.map(String).filter(Boolean).slice(0, 5) : []
+      title: sanitizeTopicLanguage(String(t.title || t.topic || '').trim()),
+      brief: sanitizeTopicLanguage(String(t.brief || t.description || '').trim()),
+      angle: sanitizeTopicLanguage(String(t.angle || '').trim()),
+      tags: Array.isArray(t.tags)
+        ? t.tags.map((tag) => sanitizeTopicLanguage(String(tag))).filter(Boolean).slice(0, 5)
+        : []
     }))
     .filter((t) => t.title && t.brief);
 }
@@ -44,6 +135,7 @@ function parseTopicResponse(raw) {
 function buildTopicUserPrompt({ mode, count, channelContext, usedTopics, referencePosts, direction }) {
   const lines = [`Режим: ${mode === 'unique' ? 'уникальные темы (новые для канала)' : 'темы в стиле канала (схожие с прошлыми)'}`];
   lines.push(`Количество тем: ${count}`);
+  lines.push(`Язык: ${TOPIC_LANGUAGE_RULES}`);
 
   if (direction?.trim()) {
     lines.push(`\nНаправление / тематика / тип контента (приоритет):\n${direction.trim()}`);
@@ -80,6 +172,8 @@ function buildTopicUserPrompt({ mode, count, channelContext, usedTopics, referen
 
 module.exports = {
   TOPIC_SYSTEM_PROMPT,
+  TOPIC_LANGUAGE_RULES,
+  sanitizeTopicLanguage,
   parseTopicResponse,
   buildTopicUserPrompt
 };
