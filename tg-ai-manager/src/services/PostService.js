@@ -3,6 +3,17 @@ const ExistingPosts = require('./ExistingPosts');
 const SummaryService = require('./SummaryService');
 const { extractText, parseMedia } = require('../utils/messageParse');
 
+function normalizeCopiedMessages(result) {
+  const list = Array.isArray(result) ? result : result?.result || [];
+  return list
+    .map((item) => {
+      if (typeof item === 'number') return item;
+      if (item?.message_id != null) return Number(item.message_id);
+      return null;
+    })
+    .filter(Boolean);
+}
+
 class PostService {
   constructor(bot) {
     this.bot = bot;
@@ -39,7 +50,10 @@ class PostService {
     }
 
     const copied = await this.bot.copyMessages(CHANNEL_ID, chatId, ids);
-    const channelIds = copied.map((m) => m.message_id);
+    const channelIds = normalizeCopiedMessages(copied);
+    if (channelIds.length !== ids.length) {
+      throw new Error(`Скопировано ${channelIds.length} из ${ids.length} сообщений`);
+    }
     const mediaGroupId = channelIds.length > 1 ? String(channelIds[0]) : null;
     console.log(`[PostService] ✅ Copied album to channel: ${channelIds.join(', ')}`);
 

@@ -101,6 +101,18 @@ class UserSettingsService {
     return Boolean(value);
   }
 
+  static async getCleanupMessageIds(userId) {
+    const s = userId ? await this.getForUser(userId) : await this._globalDefaults();
+    const ids = s.general?.botMessageIds;
+    return Array.isArray(ids) ? ids.filter(Boolean) : [];
+  }
+
+  static async setCleanupMessageIds(userId, ids) {
+    const unique = [...new Set((ids || []).map(Number).filter(Boolean))].slice(-48);
+    await this.patchUser(userId, { general: { botMessageIds: unique } });
+    return unique;
+  }
+
   static async getUiStyle(userId) {
     const s = userId ? await this.getForUser(userId) : await this._globalDefaults();
     return {

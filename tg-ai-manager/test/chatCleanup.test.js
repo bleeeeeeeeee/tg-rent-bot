@@ -41,4 +41,30 @@ describe('ChatCleanupService stack', () => {
     assert.deepEqual(ChatCleanupService.snapshotEphemeral(1), [51]);
     ChatCleanupService.resetChat(1);
   });
+
+  it('flushSession removes persisted and in-memory UI messages', async () => {
+    const ChatCleanupService = require('../src/services/ChatCleanupService');
+    const UserSettingsService = require('../src/services/UserSettingsService');
+    const deleted = [];
+    const bot = {
+      deleteMessage: async (_chatId, messageId) => {
+        deleted.push(messageId);
+      }
+    };
+
+    ChatCleanupService.resetChat(42);
+    await UserSettingsService.setCleanupMessageIds(42, [5, 6]);
+    let count = await ChatCleanupService.flushSession(bot, 42);
+    assert.equal(count, 2);
+    assert.deepEqual(deleted, [5, 6]);
+
+    deleted.length = 0;
+    ChatCleanupService.resetChat(42);
+    ChatCleanupService.trackBotMessage(42, 10);
+    ChatCleanupService.trackBotMessage(42, 11);
+    count = await ChatCleanupService.flushSession(bot, 42);
+    assert.equal(count, 2);
+    assert.deepEqual(deleted.sort((a, b) => a - b), [10, 11]);
+    ChatCleanupService.resetChat(42);
+  });
 });

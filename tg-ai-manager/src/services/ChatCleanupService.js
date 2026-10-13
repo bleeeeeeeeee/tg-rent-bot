@@ -1,10 +1,13 @@
 const UserSettingsService = require('./UserSettingsService');
 
+const MAX_PERSISTED = 48;
+
 class ChatCleanupService {
   constructor() {
     /** @type {Map<number, { ephemeral: number[], transient: number[], pinned: Set<number> }>} */
     this.stacks = new Map();
     this.replyKeyboardReady = new Set();
+    this._persistTimers = new Map();
   }
 
   _stack(chatId) {
@@ -19,6 +22,27 @@ class ChatCleanupService {
     const id = Number(chatId);
     this.stacks.delete(id);
     this.replyKeyboardReady.delete(id);
+    if (this._persistTimers.has(id)) {
+      clearTimeout(this._persistTimers.get(id));
+      this._persistTimers.delete(id);
+    }
+  }
+
+  _collectPersistIds(chatId) {
+    const stack = this.stacks.get(Number(chatId));
+    if (!stack) return [];
+    return [...new Set([...stack.ephemeral, ...stack.transient])].slice(-MAX_PERSISTED);
+  }
+
+  _schedulePersist(chatId) {
+    const id = Number(chatId);
+    if (this._persistTimers.has(id)) return;
+    const timer = setTimeout(() => {
+      this._persistTimers.delete(id);
+      const ids = this._collectPersistIds(id);
+      UserSettingsService.setCleanupMessageIds(id, ids).catch(() => {});
+    }, 400);
+    this._persistTimers.set(id, timer);
   }
 
   trackBotMessage(chatId, messageId, { pinned = false, transient = false } = {}) {
@@ -28,16 +52,19 @@ class ChatCleanupService {
       stack.pinned.add(messageId);
       stack.ephemeral = stack.ephemeral.filter((id) => id !== messageId);
       stack.transient = stack.transient.filter((id) => id !== messageId);
+      this._schedulePersist(chatId);
       return;
     }
     if (stack.pinned.has(messageId)) return;
     if (transient) {
       if (!stack.transient.includes(messageId)) stack.transient.push(messageId);
+      this._schedulePersist(chatId);
       return;
     }
     if (!stack.ephemeral.includes(messageId)) {
       stack.ephemeral.push(messageId);
     }
+    this._schedulePersist(chatId);
   }
 
   snapshotEphemeral(chatId) {
@@ -72,6 +99,7 @@ class ChatCleanupService {
       }
     }
 
+    this._schedulePersist(chatId);
     return deleted;
   }
 
@@ -98,6 +126,36 @@ class ChatCleanupService {
     const toDelete = stack.ephemeral.filter((id) => !exceptSet.has(id) && !stack.pinned.has(id));
     stack.ephemeral = stack.ephemeral.filter((id) => exceptSet.has(id) || stack.pinned.has(id));
     return this.deleteMessages(bot, chatId, toDelete, { keepPinned: true });
+  }
+
+  /**
+   * Удаляет все отслеживаемые UI-сообщения бота (в памяти + сохранённые в настройках).
+   * Не трогает закреплённые staging/preview (их снимает clearState).
+   */
+  async flushSession(bot, chatId, { keepPinned = true } = {}) {
+    const enabled = await this._chatCleanupEnabled(chatId);
+    if (!enabled) {
+      this.resetChat(chatId);
+      return 0;
+    }
+
+    const stack = this.stacks.get(Number(chatId));
+    const pinned = stack?.pinned || new Set();
+    const persisted = await UserSettingsService.getCleanupMessageIds(chatId);
+    const inMemory = stack ? [...stack.ephemeral, ...stack.transient] : [];
+    const toDelete = [...new Set([...persisted, ...inMemory])].filter(
+      (id) => !keepPinned || !pinned.has(id)
+    );
+
+    await this.deleteMessages(bot, chatId, toDelete, { keepPinned: false });
+    await UserSettingsService.setCleanupMessageIds(chatId, []);
+
+    if (stack) {
+      stack.ephemeral = [];
+      stack.transient = [];
+    }
+
+    return toDelete.length;
   }
 
   async deleteUserMessage(bot, chatId, messageId) {
@@ -144,6 +202,7 @@ class ChatCleanupService {
     } catch {
       /* already deleted */
     }
+    this._schedulePersist(chatId);
   }
 
   async ensureReplyKeyboard(bot, chatId, replyMarkup) {

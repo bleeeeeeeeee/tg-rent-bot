@@ -137,6 +137,7 @@ class BotService {
   }
 
   async goToMainMenu(userId, message = null) {
+    await ChatCleanupService.flushSession(this.bot, userId);
     await this.clearState(userId);
     const text = message || (await this.tLoc('menu.main.choose', null, userId));
     return this.sendMessage(userId, text, await this.getMainMenuFor(userId));
@@ -271,6 +272,59 @@ class BotService {
     }
     ChatCleanupService.pinMessage(userId, copied.message_id);
     return copied.message_id;
+  }
+
+  async stageSourceMessages(userId, msgs) {
+    const sorted = [...msgs].sort((a, b) => a.message_id - b.message_id);
+    const stagedIds = [];
+    const stagedMeta = [];
+
+    for (const msg of sorted) {
+      const id = await this.stageSourceMessage(userId, msg);
+      stagedIds.push(id);
+      stagedMeta.push({ text: extractText(msg), media: parseMedia(msg) });
+    }
+
+    return { stagedIds, stagedMeta };
+  }
+
+  async finalizeReadyPost(userId, msgs) {
+    const sorted = [...msgs].sort((a, b) => a.message_id - b.message_id);
+    let stagedIds;
+    let stagedMeta;
+
+    try {
+      ({ stagedIds, stagedMeta } = await this.stageSourceMessages(userId, sorted));
+    } catch {
+      return this.sendMessage(
+        userId,
+        'Не удалось сохранить пост. Попробуйте отправить ещё раз (текст, фото или видео).'
+      );
+    }
+
+    for (const msg of sorted) {
+      await ChatCleanupService.consumeUserMessage(this.bot, msg);
+    }
+
+    const primary = sorted[0];
+    stateManager.set(userId, {
+      mode: 'choose_post_action',
+      chatId: userId,
+      messageId: stagedIds[0],
+      stagingMessageId: stagedIds[0],
+      stagingMessageIds: stagedIds.length > 1 ? stagedIds : undefined,
+      stagedMeta: stagedIds.length > 1 ? stagedMeta : undefined,
+      previewText: extractText(primary),
+      media: parseMedia(primary)
+    });
+
+    return this.sendMessage(
+      userId,
+      stagedIds.length > 1
+        ? `Выберите действие с постом (${stagedIds.length} медиа):`
+        : 'Выберите действие с постом:',
+      MenuService.getPostActionMenu(await UiStyleService.get(userId))
+    );
   }
 
   async tryPublish(userId, chatId, messageId, { releaseStagingId, releaseStagingIds, messageIds, stagedMeta } = {}) {
@@ -437,6 +491,7 @@ class BotService {
     await UserSettingsService.ensureUser(userId);
     const loc = await this.locale(userId);
     await ChatCleanupService.consumeUserMessage(this.bot, msg);
+    await ChatCleanupService.flushSession(this.bot, userId);
     await this.clearState(userId);
     ChatCleanupService.resetChat(userId);
 
@@ -629,7 +684,7 @@ class BotService {
             ? [state.stagingMessageId]
             : [];
         const publish = await this.tryPublish(userId, state.chatId, state.messageId, {
-          messageIds: stagingIds.length > 1 ? stagingIds : undefined,
+          messageIds: stagingIds.length ? stagingIds : undefined,
           stagedMeta: state.stagedMeta,
           releaseStagingIds: stagingIds
         });
@@ -758,26 +813,15 @@ class BotService {
     }
 
     if (state.mode === 'waiting_post') {
-      let stagedId;
-      try {
-        stagedId = await this.stageSourceMessage(userId, msg);
-      } catch {
-        return this.sendMessage(
-          userId,
-          'Не удалось сохранить пост. Попробуйте отправить ещё раз (текст, фото или видео).'
-        );
+      if (msg.media_group_id) {
+        MediaGroupCollector.push(userId, msg, async (albumMsgs) => {
+          const current = stateManager.get(userId);
+          if (current?.mode !== 'waiting_post') return;
+          return this.finalizeReadyPost(userId, albumMsgs);
+        });
+        return;
       }
-      await ChatCleanupService.consumeUserMessage(this.bot, msg);
-
-      stateManager.set(userId, {
-        mode: 'choose_post_action',
-        chatId: userId,
-        messageId: stagedId,
-        stagingMessageId: stagedId,
-        previewText: extractText(msg),
-        media: parseMedia(msg)
-      });
-      return this.sendMessage(userId, 'Выберите действие с постом:', MenuService.getPostActionMenu(await UiStyleService.get(userId)));
+      return this.finalizeReadyPost(userId, [msg]);
     }
 
     if (state.mode === 'waiting_edit') {

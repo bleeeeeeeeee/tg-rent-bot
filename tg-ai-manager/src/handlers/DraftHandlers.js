@@ -148,8 +148,13 @@ class DraftHandlers {
       if (!draft) {
         return this.bs.sendMessage(userId, 'Черновик не найден.', await MenuService.getMainMenu());
       }
+      const stagingIds = draft.stagingMessageIds?.length
+        ? draft.stagingMessageIds
+        : [draft.messageId];
       const publish = await this.bs.tryPublish(userId, draft.chatId, draft.messageId, {
-        releaseStagingId: draft.messageId
+        messageIds: stagingIds.length ? stagingIds : undefined,
+        stagedMeta: draft.stagedMeta,
+        releaseStagingIds: stagingIds
       });
       if (!publish.ok) {
         await this.bs.sendMessage(userId, publish.message);
