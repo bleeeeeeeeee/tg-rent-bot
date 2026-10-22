@@ -37,6 +37,7 @@ from aiogram.types import (
     Message,
 )
 
+import config.settings as settings
 from config.settings import (
     BOT_TOKEN,
     ADMIN_ID,
@@ -56,6 +57,47 @@ from database.db_manager import DatabaseManager
 # ─────────────────────────────────────────────
 LOG_RELAY_QUEUE_SIZE = 256
 ORCH_MAX_MSGS = 150
+
+TEXTS = {
+    "ru": {
+        "stats": "📊 Статистика",
+        "launch": "🚀 Запустить",
+        "import": "📥 Импорт аккаунта",
+        "help": "ℹ️ Помощь",
+        "lang": "🌐 Язык: Русский",
+        "initializing": "🤖 Бот запускается… попробуйте ещё раз чуть позже.",
+        "welcome": (
+            "🔐 <b>Панель администратора</b>\n\n"
+            "Вы вошли как администратор.\n"
+            "Используйте кнопки ниже или команды:\n"
+            "  /stats — статистика аккаунтов\n"
+            "  /launch — запустить обработку\n"
+            "  /import — импорт аккаунтов\n"
+            "  /help — справка\n\n"
+            "🔒 Бот доступен только администратору."
+        ),
+        "lang_changed": "Язык интерфейса изменён на русский.",
+    },
+    "en": {
+        "stats": "📊 Statistics",
+        "launch": "🚀 Launch",
+        "import": "📥 Import account",
+        "help": "ℹ️ Help",
+        "lang": "🌐 Language: English",
+        "initializing": "🤖 The bot is starting… please try again shortly.",
+        "welcome": (
+            "🔐 <b>Admin Panel</b>\n\n"
+            "You are authenticated as the administrator.\n"
+            "Use the buttons below or these commands:\n"
+            "  /stats — account statistics\n"
+            "  /launch — start processing\n"
+            "  /import — import accounts\n"
+            "  /help — show help\n\n"
+            "🔒 This bot is accessible only to the administrator."
+        ),
+        "lang_changed": "The interface language is now English.",
+    },
+}
 
 logger = logging.getLogger("admin_bot")
 
@@ -202,15 +244,19 @@ class TelegramLogRelay:
 # 3.  Keyboard Builder
 # ═════════════════════════════════════════════
 def _build_main_keyboard() -> InlineKeyboardMarkup:
+    lang = settings.CURRENT_BOT_LANG
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📊 Dashboard / Stats", callback_data="stats"),
-                InlineKeyboardButton(text="🚀 Launch Farm", callback_data="launch"),
+                InlineKeyboardButton(text=TEXTS[lang]["stats"], callback_data="stats"),
+                InlineKeyboardButton(text=TEXTS[lang]["launch"], callback_data="launch"),
             ],
             [
-                InlineKeyboardButton(text="📥 Import Account", callback_data="import"),
-                InlineKeyboardButton(text="ℹ️  Help", callback_data="help"),
+                InlineKeyboardButton(text=TEXTS[lang]["import"], callback_data="import"),
+                InlineKeyboardButton(text=TEXTS[lang]["help"], callback_data="help"),
+            ],
+            [
+                InlineKeyboardButton(text=TEXTS[lang]["lang"], callback_data="toggle_language"),
             ],
         ],
     )
@@ -253,7 +299,7 @@ async def cmd_start(message: Message) -> None:
 
     if not _bot:
         await message.answer(
-            "🤖 Bot is initialising… try again in a moment.",
+            TEXTS[settings.CURRENT_BOT_LANG]["initializing"],
             reply_markup=_build_main_keyboard(),
         )
         return
@@ -261,19 +307,21 @@ async def cmd_start(message: Message) -> None:
     await _log_relay.start(_bot, _admin_chat_id)
 
     await message.answer(
-        (
-            "🔐 <b>Telegram Farm Manager – Admin Panel</b>\n\n"
-            "You are authenticated as the admin.\n"
-            "Use the buttons below or type commands:\n"
-            "  /stats  – account dashboard\n"
-            "  /launch – run the farm orchestrator\n"
-            "  /import – import new accounts\n"
-            "  /help   – show this message\n\n"
-            "🔒 This bot is accessible ONLY to you."
-        ),
+        TEXTS[settings.CURRENT_BOT_LANG]["welcome"],
         parse_mode="HTML",
         reply_markup=_build_main_keyboard(),
     )
+
+
+@router.callback_query(F.data == "toggle_language")
+async def toggle_language(callback: CallbackQuery) -> None:
+    settings.CURRENT_BOT_LANG = "en" if settings.CURRENT_BOT_LANG == "ru" else "ru"
+    lang = settings.CURRENT_BOT_LANG
+
+    await callback.answer(TEXTS[lang]["lang_changed"])
+    await _reply(callback, TEXTS[lang]["welcome"])
+    if callback.message:
+        await callback.message.delete()
 
 
 # ── /help ────────────────────────────────────
