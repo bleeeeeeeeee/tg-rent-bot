@@ -1,0 +1,24 @@
+# Telegram Farm Management System - Dependencies
+# Python 3.11+
+
+# Core Telegram API (async)
+pyrogram==2.0.106
+tgcrypto==1.2.5
+
+# Async HTTP with proxy support
+aiohttp==3.9.1
+aiohttp-proxy==0.1.2
+
+# Async SQLite
+aiosqlite==0.19.0
+
+# TUI Framework
+textual==0.48.2
+
+# Utility
+pyyaml==6.0.1
+
+# ─────────────────────────────────────────────
+# Admin Bot (Telegram control panel)
+# ─────────────────────────────────────────────
+aiogram>=3.0

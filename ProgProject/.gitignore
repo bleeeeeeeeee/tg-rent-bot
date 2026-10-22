@@ -1,0 +1,8 @@
+*.session
+*.session-journal
+*.db
+*.sqlite
+/imports/
+config/settings.py
+__pycache__/
+.DS_Store
