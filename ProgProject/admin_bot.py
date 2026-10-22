@@ -53,7 +53,8 @@ from config.settings import (
     LOG_LEVEL,
 )
 from utils.logger import setup_logging
-from database.db_manager import DatabaseManager
+from database.db_manager import DatabaseManager, Account
+from tg_farm_manager.orchestrator import FarmOrchestrator
 from utils.localization import LocalizationManager
 
 # ─────────────────────────────────────────────
@@ -67,20 +68,17 @@ logger = logging.getLogger("admin_bot")
 
 
 @dataclass(slots=True)
-class RuntimeState:
-    """Runtime configuration and the transient data shown in the panel."""
-
+class BotSettings:
     lang: str = "ru"
     show_hints: bool = True
-    is_processing: bool = False
-    stats: dict[str, int] | None = None
-    notice: str | None = None
-    recent_logs: tuple[str, ...] = ()
-    view: str = "main"
+    process_active: bool = False
 
 
-runtime_state = RuntimeState()
-settings.CURRENT_BOT_LANG = runtime_state.lang
+bot_settings = BotSettings()
+db = DatabaseManager()
+orchestrator = FarmOrchestrator(BOT_USERNAME)
+_orchestrator_task: asyncio.Task | None = None
+settings.CURRENT_BOT_LANG = bot_settings.lang
 
 _PANEL_TEXTS = {
     "ru": {
@@ -88,26 +86,28 @@ _PANEL_TEXTS = {
         "status_label": "Состояние",
         "status_running": "процесс запущен",
         "status_stopped": "процесс остановлен",
-        "main_hint": "Используйте кнопки ниже для управления процессом.",
-        "settings_title": "⚙️ Настройки интерфейса",
-        "settings_language": "Язык интерфейса",
-        "settings_hints": "Справочные инструкции",
-        "hints_shown": "показываются",
-        "hints_hidden": "скрыты",
-        "input_instruction": (
-            "<b>📥 Ввод параметров</b>\n\n"
-            "Отправьте строку в формате:\n"
-            "<code>Значение_1 | Значение_2</code>"
+        "main_hint": (
+            "💡 <i>Инструкция: Используйте меню настроек для изменения "
+            "параметров отображения пульта.</i>"
         ),
+        "settings_view": (
+            "<b>⚙️ Настройки интерфейса</b>\n\n"
+            "Здесь можно переключить язык и отображение подсказок."
+        ),
+        "input_screen": (
+            "<b>📥 Ввод текстовых данных</b>\n\n"
+            "Пришлите номер телефона и прокси через разделитель:\n"
+            "<code>+79990000000 | socks5://user:pass@host:port</code>"
+        ),
+        "input_saved": "<b>✅ Данные сохранены.</b>",
         "input_invalid": (
-            "❌ Неверный формат. Отправьте ровно два значения через символ |."
+            "<b>❌ Не удалось сохранить данные.</b>\n\n"
+            "Укажите номер телефона перед разделителем <code>|</code>."
         ),
-        "input_empty": "❌ Оба значения должны быть заполнены.",
-        "input_save_failed": "❌ Не удалось сохранить данные. Попробуйте ещё раз.",
-        "input_saved": (
-            "<b>✅ Параметры сохранены</b>\n\n"
-            "<b>Значение 1:</b> {param_1}\n"
-            "<b>Значение 2:</b> {param_2}"
+        "input_save_failed": "<b>❌ Ошибка сохранения данных.</b>",
+        "session_instruction": (
+            "Перенесите готовый файл сессии в папку <code>sessions/</code> "
+            "и переименуйте его строго в <code>{session_name}.session</code>."
         ),
         "stats_title": "📊 Статистика аккаунтов",
         "stats_unavailable": "Статистика пока недоступна.",
@@ -118,11 +118,10 @@ _PANEL_TEXTS = {
         "stats_on_hold": "⏸️ На паузе",
         "stats_proxy": "🌐 С прокси",
         "stats_wallets": "💰 С привязанным кошельком",
-        "settings_switch_language": "🌐 Язык: RU → EN",
-        "settings_switch_language_en": "🌐 Language: EN → RU",
-        "settings_hide_hints": "📖 Инструкции: Скрыть",
-        "settings_show_hints": "📖 Инструкции: Показать",
-        "back": "↩️ Назад в меню",
+        "language_button": "🌐 Язык: RU / EN",
+        "hints_show_button": "📖 Подсказки: Показать",
+        "hints_hide_button": "📖 Подсказки: Скрыть",
+        "back_button": "↩️ Назад",
         "stats_button": "📊 Статистика",
         "start_button": "🚀 Старт процесса",
         "stop_button": "🛑 Стоп процесса",
@@ -136,26 +135,27 @@ _PANEL_TEXTS = {
         "status_label": "Status",
         "status_running": "process is running",
         "status_stopped": "process is stopped",
-        "main_hint": "Use the buttons below to manage the process.",
-        "settings_title": "⚙️ Interface settings",
-        "settings_language": "Interface language",
-        "settings_hints": "Help instructions",
-        "hints_shown": "shown",
-        "hints_hidden": "hidden",
-        "input_instruction": (
-            "<b>📥 Enter parameters</b>\n\n"
-            "Send one line in this format:\n"
-            "<code>Value_1 | Value_2</code>"
+        "main_hint": (
+            "💡 <i>Hint: Use the settings menu to change the panel display options.</i>"
         ),
+        "settings_view": (
+            "<b>⚙️ Interface settings</b>\n\n"
+            "Change the language and hint visibility here."
+        ),
+        "input_screen": (
+            "<b>📥 Text input</b>\n\n"
+            "Send the phone number and proxy separated by a pipe:\n"
+            "<code>+19990000000 | socks5://user:pass@host:port</code>"
+        ),
+        "input_saved": "<b>✅ Data saved.</b>",
         "input_invalid": (
-            "❌ Invalid format. Send exactly two values separated by |."
+            "<b>❌ The data could not be saved.</b>\n\n"
+            "Enter a phone number before the <code>|</code> separator."
         ),
-        "input_empty": "❌ Both values are required.",
-        "input_save_failed": "❌ Could not save the data. Please try again.",
-        "input_saved": (
-            "<b>✅ Parameters saved</b>\n\n"
-            "<b>Value 1:</b> {param_1}\n"
-            "<b>Value 2:</b> {param_2}"
+        "input_save_failed": "<b>❌ Failed to save the data.</b>",
+        "session_instruction": (
+            "Move the ready session file to the <code>sessions/</code> folder "
+            "and name it exactly <code>{session_name}.session</code>."
         ),
         "stats_title": "📊 Account statistics",
         "stats_unavailable": "Statistics are not available yet.",
@@ -166,15 +166,14 @@ _PANEL_TEXTS = {
         "stats_on_hold": "⏸️ On hold",
         "stats_proxy": "🌐 With proxy",
         "stats_wallets": "💰 Wallets linked",
-        "settings_switch_language": "🌐 Language: RU → EN",
-        "settings_switch_language_en": "🌐 Language: EN → RU",
-        "settings_hide_hints": "📖 Instructions: Hide",
-        "settings_show_hints": "📖 Instructions: Show",
-        "back": "↩️ Back to menu",
+        "language_button": "🌐 Language: RU / EN",
+        "hints_show_button": "📖 Hints: Show",
+        "hints_hide_button": "📖 Hints: Hide",
+        "back_button": "↩️ Back",
         "stats_button": "📊 Statistics",
         "start_button": "🚀 Start process",
         "stop_button": "🛑 Stop process",
-        "input_button": "📥 Enter parameters",
+        "input_button": "📥 Enter text",
         "settings_button": "⚙️ Settings",
         "cancel_button": "❌ Cancel",
         "logs_title": "<b>Recent activity</b>",
@@ -182,65 +181,83 @@ _PANEL_TEXTS = {
 }
 
 
-def get_panel_content(view_type: str, state: RuntimeState) -> str:
-    """Render a complete HTML panel screen for the requested view."""
-    lang = state.lang if state.lang in _PANEL_TEXTS else "ru"
+def render_view(view_name: str, settings: BotSettings) -> str:
+    """Return the HTML text for a supported panel view."""
+    lang = settings.lang if settings.lang in _PANEL_TEXTS else "ru"
     text = _PANEL_TEXTS[lang]
 
-    if view_type == "main":
-        status_key = "status_running" if state.is_processing else "status_stopped"
-        sections = [
-            f"<b>{text['main_title']}</b>",
-            f"{text['status_label']}: <b>{text[status_key]}</b>.",
-        ]
-        if state.notice:
-            sections.append(state.notice)
-        if state.recent_logs:
-            raw_logs = "\n".join(state.recent_logs)[-550:]
-            log_text = html.escape(raw_logs)
-            sections.append(f"{text['logs_title']}\n<pre>{log_text}</pre>")
-        if state.show_hints:
-            sections.append(f"<i>{text['main_hint']}</i>")
-        return "\n\n".join(sections)
-
-    if view_type == "settings":
-        language_name = "Русский" if lang == "ru" else "English"
-        hints_status = text["hints_shown"] if state.show_hints else text["hints_hidden"]
-        return (
-            f"<b>{text['settings_title']}</b>\n\n"
-            f"🌐 {text['settings_language']}: <b>{language_name}</b>\n"
-            f"📖 {text['settings_hints']}: <b>{hints_status}</b>"
+    if view_name == "main":
+        status_key = "status_running" if settings.process_active else "status_stopped"
+        content = (
+            f"<b>{text['main_title']}</b>\n\n"
+            f"{text['status_label']}: <b>{text[status_key]}</b>."
         )
+        if settings.show_hints:
+            content += f"\n\n{text['main_hint']}"
+        return content
+    if view_name == "settings":
+        return text["settings_view"]
+    if view_name == "input_screen":
+        return text["input_screen"]
+    raise ValueError(f"Unsupported view: {view_name!r}")
 
-    if view_type == "input":
-        sections = [text["input_instruction"]]
-        if state.notice:
-            sections.append(state.notice)
-        return "\n\n".join(sections)
 
-    if view_type == "stats":
-        lines = [f"<b>{text['stats_title']}</b>"]
-        if state.notice:
-            lines.append(state.notice)
-        elif state.stats is None:
-            lines.append(text["stats_unavailable"])
-        else:
-            rows = (
-                ("total", "stats_total"),
-                ("active", "stats_active"),
-                ("banned", "stats_banned"),
-                ("spamblock", "stats_spamblock"),
-                ("on_hold", "stats_on_hold"),
-                ("with_proxy", "stats_proxy"),
-                ("wallets_bound", "stats_wallets"),
+_panel_notice: str | None = None
+_stats_snapshot: dict[str, int] | None = None
+_recent_logs: tuple[str, ...] = ()
+_active_view = "main"
+
+
+def _render_stats_view() -> str:
+    lang = bot_settings.lang if bot_settings.lang in _PANEL_TEXTS else "ru"
+    text = _PANEL_TEXTS[lang]
+    lines = [f"<b>{text['stats_title']}</b>"]
+    if _panel_notice:
+        lines.append(_panel_notice)
+    elif _stats_snapshot is None:
+        lines.append(text["stats_unavailable"])
+    else:
+        rows = (
+            ("total", "stats_total"),
+            ("active", "stats_active"),
+            ("banned", "stats_banned"),
+            ("on_hold", "stats_on_hold"),
+        )
+        lines.extend(
+            f"{text[label]}: <b>{html.escape(str(_stats_snapshot.get(key, 0)))}</b>"
+            for key, label in rows
+        )
+    return "\n\n".join(lines)
+
+
+def _render_panel_content(view_name: str) -> str:
+    if view_name == "stats":
+        return _render_stats_view()
+    if view_name == "input_result":
+        return _panel_notice or "<b>✅ Данные приняты!</b>"
+
+    content = render_view(view_name, bot_settings)
+    lang = bot_settings.lang if bot_settings.lang in _PANEL_TEXTS else "ru"
+    text = _PANEL_TEXTS[lang]
+    additions: list[str] = []
+
+    if view_name == "main":
+        hint = f"\n\n{text['main_hint']}"
+        if bot_settings.show_hints:
+            content = content[:-len(hint)]
+        if _panel_notice:
+            additions.append(_panel_notice)
+        if _recent_logs:
+            raw_logs = "\n".join(_recent_logs)[-550:]
+            additions.append(
+                f"{text['logs_title']}\n<pre>{html.escape(raw_logs)}</pre>"
             )
-            lines.extend(
-                f"{text[label]}: <b>{html.escape(str(state.stats.get(key, 0)))}</b>"
-                for key, label in rows
-            )
-        return "\n\n".join(lines)
+        if bot_settings.show_hints:
+            additions.append(text["main_hint"])
+    elif view_name == "input_screen" and _panel_notice:
+        additions.append(_panel_notice)
 
-    raise ValueError(f"Unsupported panel view: {view_type!r}")
+    return "\n\n".join([content, *additions])
 
 
 # ═════════════════════════════════════════════
@@ -250,7 +267,7 @@ class LocalizationMiddleware(BaseMiddleware):
     """Expose the current interface language to each handler as ``lang``."""
 
     async def __call__(self, handler, event, data):
-        data["lang"] = runtime_state.lang
+        data["lang"] = bot_settings.lang
         return await handler(event, data)
 
 
@@ -273,7 +290,7 @@ class AdminFilter(BaseFilter):
         return True
 
 
-class PanelStates(StatesGroup):
+class MenuStates(StatesGroup):
     waiting_for_text = State()
 
 
@@ -345,10 +362,12 @@ class TelegramLogRelay(logging.Handler):
         logger.info("TelegramLogRelay stopped.")
 
     async def reset(self) -> None:
+        global _recent_logs
         self._messages_sent = 0
         self._coalesce_buf = ""
         self._coalesce_cnt = 0
         self._recent_lines.clear()
+        _recent_logs = ()
         self._last_edit_at = 0.0
 
     async def enqueue(self, text: str) -> None:
@@ -401,10 +420,13 @@ class TelegramLogRelay(logging.Handler):
         if self._bot is None or self._admin_chat_id is None:
             return
 
+        global _recent_logs
         self._recent_lines.append(text.replace("\x00", "")[:500])
-        runtime_state.recent_logs = tuple(self._recent_lines)
-        active_view = runtime_state.view
-        panel_text = get_panel_content(active_view, runtime_state)
+        _recent_logs = tuple(self._recent_lines)
+        active_view = _active_view
+        if active_view != "main":
+            return
+        panel_text = _render_panel_content(active_view)
 
         try:
             if self._active:
@@ -415,7 +437,7 @@ class TelegramLogRelay(logging.Handler):
             await _edit_panel(
                 chat_id=self._admin_chat_id,
                 text=panel_text,
-                reply_markup=_keyboard_for_view(active_view),
+                reply_markup=get_main_kb(bot_settings),
             )
             self._last_edit_at = asyncio.get_running_loop().time()
             self._messages_sent += 1
@@ -439,78 +461,64 @@ class TelegramLogRelay(logging.Handler):
 
 
 # ═════════════════════════════════════════════
-# 3.  Deterministic keyboard and panel builders
+# 3.  Deterministic keyboard builders
 # ═════════════════════════════════════════════
-def get_main_kb(state: RuntimeState) -> InlineKeyboardMarkup:
-    text = _PANEL_TEXTS[state.lang if state.lang in _PANEL_TEXTS else "ru"]
-    process_label = "stop_button" if state.is_processing else "start_button"
-    process_callback = "proc_stop" if state.is_processing else "proc_start"
+def get_main_kb(settings: BotSettings) -> InlineKeyboardMarkup:
+    text = _PANEL_TEXTS[settings.lang if settings.lang in _PANEL_TEXTS else "ru"]
+    process_label = "stop_button" if settings.process_active else "start_button"
+    process_callback = "cb_stop" if settings.process_active else "cb_start"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(
-                text=text["stats_button"], callback_data="stats",
+                text=text["stats_button"], callback_data="cb_stats",
             ), InlineKeyboardButton(
                 text=text[process_label], callback_data=process_callback,
             )],
             [InlineKeyboardButton(
-                text=text["input_button"], callback_data="menu_input",
+                text=text["input_button"], callback_data="cb_input_mode",
             ), InlineKeyboardButton(
-                text=text["settings_button"], callback_data="menu_settings",
+                text=text["settings_button"], callback_data="cb_settings_mode",
             )],
         ],
     )
 
 
-def get_settings_kb(state: RuntimeState) -> InlineKeyboardMarkup:
-    lang = state.lang if state.lang in _PANEL_TEXTS else "ru"
+def get_settings_kb(settings: BotSettings) -> InlineKeyboardMarkup:
+    lang = settings.lang if settings.lang in _PANEL_TEXTS else "ru"
     text = _PANEL_TEXTS[lang]
-    language_callback = "set_lang_en" if lang == "ru" else "set_lang_ru"
-    language_label = (
-        "settings_switch_language" if lang == "ru"
-        else "settings_switch_language_en"
-    )
-    hints_label = "settings_hide_hints" if state.show_hints else "settings_show_hints"
+    language_callback = "cb_toggle_language"
+    hints_label = "hints_hide_button" if settings.show_hints else "hints_show_button"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(
-                text=text[language_label], callback_data=language_callback,
+                text=text["language_button"], callback_data=language_callback,
             )],
             [InlineKeyboardButton(
-                text=text[hints_label], callback_data="toggle_hints",
+                text=text[hints_label], callback_data="cb_toggle_hints",
             )],
             [InlineKeyboardButton(
-                text=text["back"], callback_data="back_to_main",
+                text=text["back_button"], callback_data="cb_back_to_main",
             )],
         ],
     )
 
 
-def get_input_kb(state: RuntimeState) -> InlineKeyboardMarkup:
-    text = _PANEL_TEXTS[state.lang if state.lang in _PANEL_TEXTS else "ru"]
+def get_back_kb(settings: BotSettings) -> InlineKeyboardMarkup:
+    text = _PANEL_TEXTS[settings.lang if settings.lang in _PANEL_TEXTS else "ru"]
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=text["cancel_button"], callback_data="cancel_input"),
+        InlineKeyboardButton(text=text["back_button"], callback_data="cb_back_to_main"),
     ]])
-
-
-def _keyboard_for_view(view_type: str) -> InlineKeyboardMarkup:
-    if view_type == "settings":
-        return get_settings_kb(runtime_state)
-    if view_type == "input":
-        return get_input_kb(runtime_state)
-    return get_main_kb(runtime_state)
 
 
 # ═════════════════════════════════════════════
 # 4.  Bot-wide state
 # ═════════════════════════════════════════════
 _log_relay = TelegramLogRelay()
-_orchestrator_task: asyncio.Task | None = None
-_db: DatabaseManager | None = None
+_db: DatabaseManager | None = db
 _bot: Bot | None = None
 _admin_chat_id: int | None = None
 _panel_chat_id: int | None = None
 _panel_message_id: int | None = None
-_saved_parameters: tuple[str, str] | None = None
 _process_lock = asyncio.Lock()
 
 
@@ -533,13 +541,14 @@ async def _reply(
     parse_mode: str = "HTML",
     reply_markup: InlineKeyboardMarkup | None = None,
 ) -> None:
-    global _admin_chat_id
-    runtime_state.lang = lang if lang in _PANEL_TEXTS else "ru"
-    runtime_state.view = "main"
-    runtime_state.notice = text
-    runtime_state.stats = None
-    rendered = get_panel_content("main", runtime_state)
-    kb = reply_markup if reply_markup is not None else get_main_kb(runtime_state)
+    global _active_view, _admin_chat_id, _panel_notice, _stats_snapshot
+    bot_settings.lang = lang if lang in _PANEL_TEXTS else "ru"
+    settings.CURRENT_BOT_LANG = bot_settings.lang
+    _active_view = "main"
+    _panel_notice = text
+    _stats_snapshot = None
+    rendered = _render_panel_content(_active_view)
+    kb = reply_markup if reply_markup is not None else get_main_kb(bot_settings)
     if isinstance(obj, CallbackQuery):
         if isinstance(obj.message, Message):
             _admin_chat_id = obj.message.chat.id
@@ -567,17 +576,17 @@ async def _show_view(
     reply_markup: InlineKeyboardMarkup | None = None,
 ) -> None:
     """Render a named view in the one persistent panel message."""
-    global _admin_chat_id
+    global _active_view, _admin_chat_id
 
-    runtime_state.view = view_type
-    text = get_panel_content(view_type, runtime_state)
+    _active_view = view_type
+    text = _render_panel_content(view_type)
     if reply_markup is None:
         if view_type == "settings":
-            reply_markup = get_settings_kb(runtime_state)
-        elif view_type == "input":
-            reply_markup = get_input_kb(runtime_state)
+            reply_markup = get_settings_kb(bot_settings)
+        elif view_type in {"input_screen", "stats", "input_result"}:
+            reply_markup = get_back_kb(bot_settings)
         else:
-            reply_markup = get_main_kb(runtime_state)
+            reply_markup = get_main_kb(bot_settings)
 
     if isinstance(obj, CallbackQuery):
         if isinstance(obj.message, Message):
@@ -685,37 +694,42 @@ async def _edit_panel(
 # ── /start ───────────────────────────────────
 @router.message(CommandStart())
 async def cmd_start(message: Message, lang: str, state: FSMContext) -> None:
+    global _panel_notice, _stats_snapshot
     await state.clear()
-    runtime_state.lang = lang if lang in _PANEL_TEXTS else "ru"
-    runtime_state.notice = None
-    runtime_state.stats = None
+    bot_settings.lang = lang if lang in _PANEL_TEXTS else "ru"
+    settings.CURRENT_BOT_LANG = bot_settings.lang
+    _panel_notice = None
+    _stats_snapshot = None
     await _show_view(message, "main")
 
 
-@router.callback_query(F.data == "menu_settings")
+@router.callback_query(F.data == "cb_settings_mode")
 async def open_settings(callback: CallbackQuery, state: FSMContext) -> None:
+    global _panel_notice
     await callback.answer()
     await state.clear()
-    runtime_state.notice = None
+    _panel_notice = None
     await _show_view(callback, "settings")
 
 
-@router.callback_query(F.data.in_({"set_lang_ru", "set_lang_en"}))
+@router.callback_query(F.data == "cb_toggle_language")
 async def set_language(callback: CallbackQuery, state: FSMContext) -> None:
+    global _panel_notice
     await callback.answer()
     await state.clear()
-    runtime_state.lang = "ru" if callback.data == "set_lang_ru" else "en"
-    settings.CURRENT_BOT_LANG = runtime_state.lang
-    runtime_state.notice = None
+    bot_settings.lang = "en" if bot_settings.lang == "ru" else "ru"
+    settings.CURRENT_BOT_LANG = bot_settings.lang
+    _panel_notice = None
     await _show_view(callback, "settings")
 
 
-@router.callback_query(F.data == "toggle_hints")
+@router.callback_query(F.data == "cb_toggle_hints")
 async def toggle_hints(callback: CallbackQuery, state: FSMContext) -> None:
+    global _panel_notice
     await callback.answer()
     await state.clear()
-    runtime_state.show_hints = not runtime_state.show_hints
-    runtime_state.notice = None
+    bot_settings.show_hints = not bot_settings.show_hints
+    _panel_notice = None
     await _show_view(callback, "settings")
 
 
@@ -725,22 +739,24 @@ async def cmd_toggle_language(
     lang: str,
     state: FSMContext,
 ) -> None:
+    global _panel_notice
     await state.clear()
-    runtime_state.lang = "en" if lang == "ru" else "ru"
-    settings.CURRENT_BOT_LANG = runtime_state.lang
-    runtime_state.notice = None
+    bot_settings.lang = "en" if lang == "ru" else "ru"
+    settings.CURRENT_BOT_LANG = bot_settings.lang
+    _panel_notice = None
     await _show_view(message, "settings")
 
 
-@router.callback_query(F.data == "back_to_main")
+@router.callback_query(F.data == "cb_back_to_main")
 async def back_to_main(
     callback: CallbackQuery,
     state: FSMContext,
 ) -> None:
+    global _panel_notice, _stats_snapshot
     await callback.answer()
     await state.clear()
-    runtime_state.notice = None
-    runtime_state.stats = None
+    _panel_notice = None
+    _stats_snapshot = None
     await _show_view(callback, "main")
 
 
@@ -755,10 +771,10 @@ async def cmd_help(
     if isinstance(obj, CallbackQuery):
         await obj.answer()
     await state.clear()
-    runtime_state.notice = localization.get_text(lang, "help_text")
+    help_text = localization.get_text(lang, "help_text")
     await _reply(
         obj,
-        runtime_state.notice,
+        help_text,
         lang,
     )
 
@@ -774,7 +790,7 @@ async def cmd_launch(
     await _start_farm(obj, lang)
 
 
-@router.callback_query(F.data == "proc_start")
+@router.callback_query(F.data == "cb_start")
 async def start_process_callback(
     callback: CallbackQuery,
     lang: str,
@@ -785,7 +801,7 @@ async def start_process_callback(
     await _start_farm(callback, lang)
 
 
-@router.callback_query(F.data == "proc_stop")
+@router.callback_query(F.data == "cb_stop")
 async def stop_process_callback(
     callback: CallbackQuery,
     lang: str,
@@ -803,19 +819,17 @@ async def _start_farm(obj: Message | CallbackQuery, lang: str) -> None:
 
 
 async def _start_farm_locked(obj: Message | CallbackQuery, lang: str) -> None:
-    global _orchestrator_task, _db
+    global _orchestrator_task, _panel_notice
 
-    if runtime_state.is_processing:
+    if bot_settings.process_active:
         await _reply(obj, localization.get_text(lang, "already_running"), lang)
         return
 
     try:
-        if _db is None:
-            _db = DatabaseManager()
-            await _db.connect()
+        # Touch the shared manager once to fail early on a database problem.
+        await db.get_total_accounts_count()
     except Exception:
         logger.exception("Failed to connect to the database before starting")
-        _db = None
         await _reply(obj, localization.get_text(lang, "db_query_error"), lang)
         return
 
@@ -827,8 +841,8 @@ async def _start_farm_locked(obj: Message | CallbackQuery, lang: str) -> None:
     global _admin_chat_id
     _admin_chat_id = chat_id
     await _log_relay.reset()
-    runtime_state.is_processing = True
-    runtime_state.notice = None
+    bot_settings.process_active = True
+    _panel_notice = None
 
     try:
         await _reply(
@@ -838,7 +852,7 @@ async def _start_farm_locked(obj: Message | CallbackQuery, lang: str) -> None:
             lang,
         )
     except Exception:
-        runtime_state.is_processing = False
+        bot_settings.process_active = False
         raise
 
     if _bot is not None:
@@ -860,8 +874,8 @@ async def _stop_farm_locked(lang: str) -> str:
     global _orchestrator_task
 
     task = _orchestrator_task
-    if not runtime_state.is_processing or task is None or task.done():
-        runtime_state.is_processing = False
+    if not bot_settings.process_active or task is None or task.done():
+        bot_settings.process_active = False
         return localization.get_text(lang, "process_status_stopped")
 
     task.cancel()
@@ -870,7 +884,7 @@ async def _stop_farm_locked(lang: str) -> str:
     except asyncio.CancelledError:
         pass
     finally:
-        runtime_state.is_processing = False
+        bot_settings.process_active = False
         if _orchestrator_task is task:
             _orchestrator_task = None
         try:
@@ -884,31 +898,39 @@ async def _stop_farm_locked(lang: str) -> str:
 
 # ── /stats / Dashboard callback ──────────────
 @router.message(Command("stats"))
-@router.callback_query(F.data == "stats")
+@router.callback_query(F.data == "cb_stats")
 async def cmd_stats(
     obj: Message | CallbackQuery,
     lang: str,
     state: FSMContext,
 ) -> None:
+    global _panel_notice, _stats_snapshot
     if isinstance(obj, CallbackQuery):
         await obj.answer()
     await state.clear()
-    global _db
+    global db
     try:
-        if _db is None:
-            _db = DatabaseManager()
-            await _db.connect()
-        stats = await _db.get_stats()
+        total, active, banned, on_hold = await asyncio.gather(
+            db.get_total_accounts_count(),
+            db.get_accounts_count_by_status("Active"),
+            db.get_accounts_count_by_status("Banned"),
+            db.get_accounts_count_by_status("On_Hold"),
+        )
+        stats = {
+            "total": total,
+            "active": active,
+            "banned": banned,
+            "on_hold": on_hold,
+        }
     except Exception as exc:
         logger.error("Failed to get stats: %s", exc)
-        _db = None
-        runtime_state.stats = None
-        runtime_state.notice = localization.get_text(lang, "db_query_error")
+        _stats_snapshot = None
+        _panel_notice = localization.get_text(lang, "db_query_error")
         await _show_view(obj, "stats")
         return
 
-    runtime_state.stats = stats
-    runtime_state.notice = None
+    _stats_snapshot = stats
+    _panel_notice = None
     await _show_view(obj, "stats")
 
 
@@ -920,118 +942,80 @@ async def cmd_import(
     lang: str,
     state: FSMContext,
 ) -> None:
+    global _panel_notice
     if isinstance(obj, CallbackQuery):
         await obj.answer()
     await state.clear()
-    runtime_state.notice = localization.get_text(lang, "import_instruction")
-    await _reply(obj, runtime_state.notice, lang)
+    _panel_notice = localization.get_text(lang, "import_instruction")
+    await _reply(obj, _panel_notice, lang)
 
 
-@router.callback_query(F.data == "menu_input")
-async def request_parameters(
+@router.callback_query(F.data == "cb_input_mode")
+async def open_input_mode(
     callback: CallbackQuery,
     state: FSMContext,
-    lang: str,
 ) -> None:
     await callback.answer()
     if not isinstance(callback.message, Message):
         return
 
-    runtime_state.notice = None
-    await state.set_state(PanelStates.waiting_for_text)
-    await state.update_data(panel_msg_id=callback.message.message_id)
-    await _show_view(callback, "input")
+    global _panel_notice
+    _panel_notice = None
+    await state.set_state(MenuStates.waiting_for_text)
+    await state.update_data(menu_msg_id=callback.message.message_id)
+    await _show_view(callback, "input_screen")
 
 
-@router.callback_query(F.data == "cancel_input")
-async def cancel_input(
-    callback: CallbackQuery,
-    state: FSMContext,
-    lang: str,
-) -> None:
-    await callback.answer()
-    await state.clear()
-    runtime_state.notice = None
-    await _show_view(callback, "main")
+@router.message(MenuStates.waiting_for_text, F.text)
+async def receive_text(message: Message, state: FSMContext) -> None:
+    global _active_view, _panel_notice
 
-
-async def db_save(param_1: str, param_2: str) -> None:
-    """Persistence integration point; replace this stub with the project DB write."""
-    pass
-
-
-@router.message(PanelStates.waiting_for_text, F.text)
-async def save_parameters(message: Message, state: FSMContext, lang: str) -> None:
-    global _saved_parameters
-
-    # Remove the submitted message before doing any parsing or persistence.
     await _delete_user_message(message)
 
     data = await state.get_data()
-    panel_msg_id = data.get("panel_msg_id")
-    if panel_msg_id is None:
+    menu_msg_id = data.get("menu_msg_id")
+    if menu_msg_id is None:
         await state.clear()
         return
 
-    parts = message.text.split("|")
-    if len(parts) != 2:
-        runtime_state.notice = _PANEL_TEXTS[runtime_state.lang]["input_invalid"]
-        await _edit_panel(
-            chat_id=message.chat.id,
-            message_id=panel_msg_id,
-            text=get_panel_content("input", runtime_state),
-            reply_markup=get_input_kb(runtime_state),
-        )
-        return
+    lang = bot_settings.lang if bot_settings.lang in _PANEL_TEXTS else "ru"
+    text = _PANEL_TEXTS[lang]
+    payload = (message.text or "").strip()
+    parts = payload.split("|", maxsplit=1)
+    phone = parts[0].strip()
+    proxy = parts[1].strip() if len(parts) == 2 else ""
 
-    param_1, param_2 = (part.strip() for part in parts)
-    if not param_1 or not param_2:
-        runtime_state.notice = _PANEL_TEXTS[runtime_state.lang]["input_empty"]
-        await _edit_panel(
-            chat_id=message.chat.id,
-            message_id=panel_msg_id,
-            text=get_panel_content("input", runtime_state),
-            reply_markup=get_input_kb(runtime_state),
+    _active_view = "input_result"
+    if not phone:
+        _panel_notice = text["input_invalid"]
+    else:
+        clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
+        target_session_name = f"session_{clean_phone}"
+        new_worker = Account(
+            session_name=target_session_name,
+            phone_number=phone,
+            proxy_string=proxy,
+            account_status="Active",
         )
-        return
-
-    if len(param_1) + len(param_2) > 650:
-        runtime_state.notice = localization.get_text(lang, "input_too_long")
-        await _edit_panel(
-            chat_id=message.chat.id,
-            message_id=panel_msg_id,
-            text=get_panel_content("input", runtime_state),
-            reply_markup=get_input_kb(runtime_state),
-        )
-        return
+        try:
+            await db.save_account(new_worker)
+            _panel_notice = (
+                f"{text['input_saved']}\n\n"
+                f"{text['session_instruction'].format(session_name=html.escape(target_session_name))}"
+            )
+        except Exception:
+            logger.exception("Failed to save account parameters")
+            _panel_notice = text["input_save_failed"]
 
     try:
-        await db_save(param_1, param_2)
-    except Exception:
-        logger.exception("Failed to save panel parameters")
-        runtime_state.notice = _PANEL_TEXTS[runtime_state.lang]["input_save_failed"]
         await _edit_panel(
             chat_id=message.chat.id,
-            message_id=panel_msg_id,
-            text=get_panel_content("input", runtime_state),
-            reply_markup=get_input_kb(runtime_state),
+            message_id=menu_msg_id,
+            text=_render_panel_content(_active_view),
+            reply_markup=get_back_kb(bot_settings),
         )
-        return
-
-    _saved_parameters = (param_1, param_2)
-    runtime_state.stats = None
-    runtime_state.view = "main"
-    runtime_state.notice = _PANEL_TEXTS[runtime_state.lang]["input_saved"].format(
-        param_1=html.escape(param_1),
-        param_2=html.escape(param_2),
-    )
-    await _edit_panel(
-        chat_id=message.chat.id,
-        message_id=panel_msg_id,
-        text=get_panel_content("main", runtime_state),
-        reply_markup=get_main_kb(runtime_state),
-    )
-    await state.clear()
+    finally:
+        await state.clear()
 
 
 # ── File upload handler ──────────────────────
@@ -1149,21 +1133,19 @@ def _read_phones_from_file(path: Path) -> list[str]:
 # ═════════════════════════════════════════════
 async def _run_farm_in_background(bot_username: str) -> None:
     """Execute the full farm pipeline in a background asyncio task."""
-    global _orchestrator_task
+    global _active_view, _orchestrator_task, _panel_notice
     logger.info("Background farm run started.")
     final_text = localization.get_text(
-        runtime_state.lang,
+        bot_settings.lang,
         "launch_completed",
     )
     try:
-        from orchestrator import run_orchestrator
-
-        await run_orchestrator(bot_username)
+        await orchestrator.start_all_sessions()
 
         await _log_relay.enqueue("✅ Farm run completed successfully.")
     except asyncio.CancelledError:
         final_text = localization.get_text(
-            runtime_state.lang,
+            bot_settings.lang,
             "process_stopped",
         )
         logger.info("Background farm run was stopped by the administrator.")
@@ -1172,13 +1154,13 @@ async def _run_farm_in_background(bot_username: str) -> None:
         logger.exception("Farm run failed: %s", exc)
         await _log_relay.enqueue(f"❌ Farm run failed: {exc}")
         final_text = localization.get_text(
-            runtime_state.lang,
+            bot_settings.lang,
             "launch_failed",
         ).format(error=html.escape(str(exc)))
     finally:
-        runtime_state.is_processing = False
-        runtime_state.notice = final_text
-        runtime_state.view = "main"
+        bot_settings.process_active = False
+        _panel_notice = final_text
+        _active_view = "main"
         try:
             await _log_relay.stop()
         except Exception:
@@ -1187,8 +1169,8 @@ async def _run_farm_in_background(bot_username: str) -> None:
             try:
                 await _edit_panel(
                     chat_id=_admin_chat_id,
-                    text=get_panel_content("main", runtime_state),
-                    reply_markup=get_main_kb(runtime_state),
+                    text=_render_panel_content("main"),
+                    reply_markup=get_main_kb(bot_settings),
                 )
             except TelegramAPIError:
                 logger.info("Could not update the panel after process completion")
