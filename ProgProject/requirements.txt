@@ -22,3 +22,4 @@ pyyaml==6.0.1
 # Admin Bot (Telegram control panel)
 # ─────────────────────────────────────────────
 aiogram>=3.0
+python-dotenv>=1.0

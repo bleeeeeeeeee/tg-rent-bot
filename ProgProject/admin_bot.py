@@ -67,7 +67,7 @@ localization = LocalizationManager()
 logger = logging.getLogger("admin_bot")
 
 
-@dataclass(slots=True)
+@dataclass
 class BotSettings:
     lang: str = "ru"
     show_hints: bool = True
