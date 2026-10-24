@@ -1,0 +1,12 @@
+*.session
+*.session-journal
+*.db
+*.db-wal
+*.db-shm
+.env
+credentials.json
+/imports/
+/sessions/
+/logs/
+__pycache__/
+.DS_Store
