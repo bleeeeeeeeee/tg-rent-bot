@@ -1,0 +1,7 @@
+ProgProject/
+├── admin_bot.py
+├── requirements.txt
+└── tg_farm_manager/
+    ├── config/
+    │   └── settings.py
+    └── ...

@@ -1,0 +1,7 @@
+tg_farm_manager/
+├── admin_bot.py
+├── .env
+├── .gitignore
+├── requirements.txt
+└── config/
+    └── settings.py
