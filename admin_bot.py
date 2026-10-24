@@ -5,10 +5,13 @@ from aiogram.dispatcher.filters.state import FSMContext, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
 
-API_ID = config.settings.TELEGRAM_API_ID
-API_HASH = config.settings.TELEGRAM_API_HASH
-BOT_TOKEN = config.settings.TELEGRAM_BOT_TOKEN
-ADMIN_ID = config.settings.ADMIN_ID
+# Import config module
+import config.settings as config
+
+API_ID = config.TELEGRAM_API_ID
+API_HASH = config.TELEGRAM_API_HASH
+BOT_TOKEN = config.TELEGRAM_BOT_TOKEN
+ADMIN_ID = config.ADMIN_ID
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
@@ -32,7 +35,7 @@ async def handle_document(message: types.Message):
     if message.from_user.id == ADMIN_ID:
         file_id = message.document.file_id
         file_info = await bot.get_file(file_id)
-        file_path = config.settings.IMPORTS_DIR / message.document.file_name
+        file_path = config.IMPORTS_DIR / message.document.file_name
         await bot.download_file(file_path=file_info.file_path, destination=file_path)
         await message.reply(f"📦 File `{message.document.file_name}` successfully stored in the staging folder.")
     else:

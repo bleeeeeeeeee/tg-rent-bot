@@ -5,8 +5,11 @@ from aiogram.dispatcher import Dispatcher, Bot
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.utils import executor
 
+# Import config module
+import config.settings as config
+
 # Initialize database connection
-DB_PATH = config.settings.BASE_DIR / "database.db"
+DB_PATH = config.BASE_DIR / "database.db"
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
